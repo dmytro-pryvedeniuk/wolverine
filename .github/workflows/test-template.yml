@@ -1,0 +1,44 @@
+name: .NET
+
+on:
+  workflow_call:
+    inputs:
+      BUILD_TARGET:
+        required: true
+        type: string
+
+env:
+  config: Release
+  disable_test_parallelization: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+        - dotnet: '8.0.x'
+          framework: 'net8.0'
+        - dotnet: '9.0.x'
+          framework: 'net9.0'
+        - dotnet: '10.0.x'
+          framework: 'net10.0'
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ matrix.dotnet }}
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+
+      - name: Run Tests
+        run: ./build.sh ${{ inputs.BUILD_TARGET }} --framework ${{ matrix.framework }}
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
