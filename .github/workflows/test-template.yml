@@ -6,10 +6,6 @@ on:
       BUILD_TARGET:
         required: true
         type: string
-      FRAMEWORKS:
-        required: false
-        type: string
-        default: '["net8.0", "net9.0", "net10.0"]'
 
 env:
   config: Release
@@ -19,9 +15,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      matrix: 
-        framework: ${{ fromJson(inputs.FRAMEWORKS) }}
 
     steps:
       - name: Checkout
@@ -35,10 +28,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Run Tests
-        env:
-          BUILD_TARGET: ${{ inputs.BUILD_TARGET }}
-          FRAMEWORK: ${{ matrix.framework }}
-        run: ./build.sh $BUILD_TARGET --framework $FRAMEWORK
+        run: ./build.sh ${{ inputs.BUILD_TARGET }}
 
       - name: Stop containers
         if: always()
