@@ -29,7 +29,7 @@ partial class Build : NukeBuild
     [Solution(GenerateProjects = true)]
     readonly Solution Solution;
     
-    [Parameter]readonly string Framework;
+    //[Parameter]readonly string Framework;
     [Parameter] readonly string PostgresConnectionString ="Host=localhost;Port=5433;Database=postgres;Username=postgres;password=postgres";
 
     Target Init => _ => _
@@ -51,7 +51,7 @@ partial class Build : NukeBuild
             DotNetBuild(s => s
                 .SetProjectFile(Solution)
                 .SetConfiguration(Configuration)
-                .SetFramework(Framework)
+                //.SetFramework(Framework)
                 .EnableNoRestore());
         });
 
@@ -74,7 +74,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
    
     Target PolicyTests => _ => _
@@ -87,7 +88,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target TestExtensions => _ => _
@@ -103,7 +105,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target DataAnnotationsValidationTests => _ => _
@@ -116,7 +119,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target MemoryPackTests => _ => _
@@ -129,7 +133,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
     
     Target MessagePackTests => _ => _
@@ -142,7 +147,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target HttpTests => _ => _
@@ -158,7 +164,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target Commands => _ => _
@@ -174,7 +181,7 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework)
+                //.SetFramework(Framework)
                 .AddApplicationArguments("describe"));
         });
     
@@ -188,7 +195,7 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework)
+                //.SetFramework(Framework)
                 .AddApplicationArguments("?"));
         });
     
@@ -202,7 +209,7 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework)
+                //.SetFramework(Framework)
                 .AddApplicationArguments("codegen")
                 .AddApplicationArguments("preview"));
         });
@@ -217,7 +224,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target PersistenceTests => _ => _
@@ -230,7 +238,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
     
     Target RabbitmqTests => _ => _
@@ -243,7 +252,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
     
     Target PulsarTests => _ => _
@@ -256,7 +266,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target TestSamples => _ => _
@@ -273,7 +284,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
    
     Target BankingServiceSampleTests => _ => _
@@ -286,7 +298,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target AppWithMiddlewareSampleTests => _ => _
@@ -299,7 +312,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target ItemServiceSampleTests => _ => _
@@ -312,7 +326,8 @@ partial class Build : NukeBuild
                 .SetConfiguration(Configuration)
                 .EnableNoBuild()
                 .EnableNoRestore()
-                .SetFramework(Framework));
+                //.SetFramework(Framework)
+                );
         });
 
     Target Pack => _ => _

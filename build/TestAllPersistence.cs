@@ -194,7 +194,7 @@ partial class Build
     /// </summary>
     bool RunTestWithRetry(string projectPath, string filter, string description, int maxAttempts = 2, string frameworkOverride = null)
     {
-        var framework = frameworkOverride ?? Framework;
+        //var framework = frameworkOverride ?? Framework;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             try
@@ -209,7 +209,7 @@ partial class Build
                     .SetConfiguration(Configuration)
                     .EnableNoBuild()
                     .EnableNoRestore()
-                    .SetFramework(framework)
+                    //.SetFramework(framework)
                     .SetFilter(filter));
 
                 return true;

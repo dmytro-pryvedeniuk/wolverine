@@ -215,18 +215,19 @@ partial class Build
 
     void BuildTestProjectsWithFramework(string frameworkOverride, params AbsolutePath[] projects)
     {
-        var framework = frameworkOverride ?? Framework;
+        string framework = null;// frameworkOverride ?? Framework;
         foreach (var project in projects)
         {
             Log.Information("Building {Project} ({Framework})...", project.Name, framework ?? "all");
             DotNetBuild(c => c
                 .SetProjectFile(project)
                 .SetConfiguration(Configuration)
-                .SetFramework(framework));
+                //.SetFramework(framework)
+                );
         }
     }
 
-    // ─── Persistence CI Targets ────────────────────────────────────────
+    // --- Persistence CI Targets ----------------------------------------
 
     Target CIPersistence => _ => _
         .ProceedAfterFailure()
@@ -322,7 +323,7 @@ partial class Build
             RunSingleProjectOneClassAtATime(efCoreMultiTenancy);
         });
 
-    // ─── Transport CI Targets ──────────────────────────────────────────
+    // --- Transport CI Targets ------------------------------------------
 
     Target CIAWS => _ => _
         .ProceedAfterFailure()
@@ -405,11 +406,11 @@ partial class Build
             BuildTestProjects(tests);
             StartDockerServices("postgresql");
 
-            var framework = Framework;
+            //var framework = Framework;
             DotNetTest(c => c
                 .SetProjectFile(tests)
                 .SetConfiguration(Configuration)
-                .SetFramework(framework)
+                //.SetFramework(framework)
                 .EnableNoBuild());
         });
 
@@ -431,7 +432,7 @@ partial class Build
     /// MessageRoutingTests live in src/Testing but exercise core routing precedence
     /// against a real RabbitMQ broker (the convention surface that matters in
     /// production). The PR #2596 PreregisterSenders regression that motivated this
-    /// target is not catchable from CoreTests — it only manifests when conventional
+    /// target is not catchable from CoreTests - it only manifests when conventional
     /// routing actually creates broker endpoints. Keep this in CI going forward so
     /// any future refactor that breaks routing precedence between Explicit /
     /// LocalRouting / MessageRoutingConventions fails fast on PRs.
