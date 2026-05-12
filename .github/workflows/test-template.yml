@@ -28,7 +28,9 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Run Tests
-        run: ./build.sh ${{ inputs.BUILD_TARGET }}
+        env:
+          BUILD_TARGET: ${{ inputs.BUILD_TARGET }}
+        run: ./build.sh $BUILD_TARGET
 
       - name: Stop containers
         if: always()
