@@ -15,30 +15,64 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - path: "src/Persistence/MartenTests/MartenTests.csproj"
+            name: "MartenTests"
+          - path: "src/Persistence/MartenSubscriptionTests/MartenSubscriptionTests.csproj"
+            name: "MartenSubscriptionTests"
+        run: [1, 2, 3, 4, 5]
+
+    name: "Test ${{ matrix.project.name }} (${{ matrix.run }})"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 9.0.x
+          fetch-depth: 1
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
-      - name: Run Marten Tests
-        run: ./build.sh CIMarten --framework net9.0
+      - name: Restore
+        run: dotnet restore ${{ matrix.project.path }}
+
+      - name: Build
+        run: dotnet build ${{ matrix.project.path }} -c Release --no-restore
+
+      - name: Start PostgreSQL
+        run: docker compose up -d postgresql
+
+      - name: Wait for PostgreSQL to be healthy
+        run: |
+          for i in {1..30}; do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' wolverine-postgresql-1)
+            if [ "$STATUS" == "healthy" ]; then
+              echo "PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "Waiting for PostgreSQL... ($i)"
+            sleep 5
+          done
+          echo "PostgreSQL failed to become healthy"
+          exit 1
+
+      - name: Test
+        run: dotnet test ${{ matrix.project.path }} -c Release --no-build --framework net9.0 --logger "trx;LogFileName=test-results.trx" --filter Category!=Flaky
+
+      - name: Report results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: xUnit Tests
+          path: "**/TestResults/*.trx"
+          reporter: dotnet-trx
+          list-suites: "failed"
+          list-tests: "failed"
 
       - name: Stop containers
         if: always()
