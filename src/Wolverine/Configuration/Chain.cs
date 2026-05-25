@@ -547,7 +547,7 @@ public class InvalidServiceLocationException : Exception
 {
     public static string ToMessage(IChain chain, ServiceLocationReport[] reports)
     {
-        var writer = new StringWriter();
+        using var writer = new StringWriter();
         writer.WriteLine($"Found service locations while generating code for {chain.Description}, but {nameof(ServiceLocationPolicy)}.{nameof(ServiceLocationPolicy.NotAllowed)} is in effect (this will become the default in Wolverine 6.0).");
         writer.WriteLine("See https://wolverinefx.net/guide/codegen.html for more information");
         writer.WriteLine("Service location(s):");

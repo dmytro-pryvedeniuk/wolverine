@@ -58,7 +58,7 @@ public sealed class DatabaseSagaStoreDiagnostics : ISagaStoreDiagnostics
     {
         if (!sagaIndex().TryGetValue(sagaTypeName, out var definition)) return null;
 
-        var conn = _database.DataSource.CreateConnection();
+        await using var conn = _database.DataSource.CreateConnection();
         await conn.OpenAsync(ct).ConfigureAwait(false);
         try
         {
@@ -91,7 +91,7 @@ public sealed class DatabaseSagaStoreDiagnostics : ISagaStoreDiagnostics
         var clamped = count <= 0 ? 0 : Math.Min(count, 1000);
         if (clamped == 0) return Array.Empty<SagaInstanceState>();
 
-        var conn = _database.DataSource.CreateConnection();
+        await using var conn = _database.DataSource.CreateConnection();
         await conn.OpenAsync(ct).ConfigureAwait(false);
         try
         {

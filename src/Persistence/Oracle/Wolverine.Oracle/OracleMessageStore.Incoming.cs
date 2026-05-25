@@ -101,18 +101,18 @@ internal partial class OracleMessageStore
         if (HasDisposed) return false;
 
         await using var conn = await _dataSource.OpenConnectionAsync(cancellation);
-        OracleCommand cmd;
+        await using var cmd = conn.CreateCommand();
 
         if (_durability.MessageIdentity == MessageIdentity.IdOnly)
         {
-            cmd = conn.CreateCommand(
-                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id");
+            cmd.CommandText = 
+                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id";
             cmd.With("id", envelope.Id);
         }
         else
         {
-            cmd = conn.CreateCommand(
-                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :destination");
+            cmd.CommandText =
+                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :destination";
             cmd.With("id", envelope.Id);
             cmd.With("destination", envelope.Destination!.ToString());
         }

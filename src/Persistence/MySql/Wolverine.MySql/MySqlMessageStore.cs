@@ -139,18 +139,18 @@ internal class MySqlMessageStore : MessageDatabase<MySqlConnection>
         await conn.CloseAsync();
     }
 
-    protected override Task deleteMany(DbTransaction tx, Guid[] ids, DbObjectName tableName,
+    protected override async Task deleteMany(DbTransaction tx, Guid[] ids, DbObjectName tableName,
         string idColumnName)
     {
-        if (ids.Length == 0) return Task.CompletedTask;
+        if (ids.Length == 0) return;
 
-        var cmd = (MySqlCommand)tx.Connection!.CreateCommand();
+        using var cmd = (MySqlCommand)tx.Connection!.CreateCommand();
         cmd.Transaction = (MySqlTransaction)tx;
 
         var placeholders = MySqlCommandExtensions.WithIdList(cmd, "id", ids);
         cmd.CommandText = $"DELETE FROM {tableName.QualifiedName} WHERE {idColumnName} IN ({placeholders})";
 
-        return cmd.ExecuteNonQueryAsync();
+        await cmd.ExecuteNonQueryAsync();
     }
 
     protected override async Task<bool> TryAttainLockAsync(int lockId, MySqlConnection connection,

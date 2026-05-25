@@ -174,7 +174,7 @@ internal class BufferedReceiver : ILocalQueue, IChannelCallback, ISupportNativeS
             return;
         }
 
-        var activity = _endpoint.TelemetryEnabled ? WolverineTracing.StartReceiving(envelope) : null;
+        using var activity = _endpoint.TelemetryEnabled ? WolverineTracing.StartReceiving(envelope) : null;
         _receivingBlock.Post(envelope);
         activity?.Stop();
     }
@@ -186,7 +186,7 @@ internal class BufferedReceiver : ILocalQueue, IChannelCallback, ISupportNativeS
             return;
         }
 
-        var activity = _endpoint.TelemetryEnabled ? WolverineTracing.StartReceiving(envelope) : null;
+        using var activity = _endpoint.TelemetryEnabled ? WolverineTracing.StartReceiving(envelope) : null;
         await _receivingBlock.PostAsync(envelope).ConfigureAwait(false);
         activity?.Stop();
     }
@@ -251,6 +251,7 @@ internal class BufferedReceiver : ILocalQueue, IChannelCallback, ISupportNativeS
         }
 
         _moveToErrors?.Dispose();
+        _scheduler.Dispose();
     }
 
     public Task MoveToErrorsAsync(Envelope envelope, Exception exception)

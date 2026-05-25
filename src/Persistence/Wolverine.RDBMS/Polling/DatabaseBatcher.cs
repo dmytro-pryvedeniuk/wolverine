@@ -34,6 +34,7 @@ public class DatabaseBatcher : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        _internalCancellation.Dispose();
         return _batchingBlock.DisposeAsync();
     }
 

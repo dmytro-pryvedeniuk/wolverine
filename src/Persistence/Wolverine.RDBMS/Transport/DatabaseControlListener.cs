@@ -70,6 +70,7 @@ internal class DatabaseControlListener : IListener
     {
         await _cancellation.CancelAsync();
         _receivingLoop.SafeDispose();
+        _retryBlock.SafeDispose();
     }
 
     public Uri Address { get; }

@@ -234,13 +234,6 @@ internal partial class OracleMessageStore : IMessageDatabase, IMessageInbox, IMe
         return _dataSource.CreateConnection();
     }
 
-    public async Task<OracleCommand> CreateCommand(string sql)
-    {
-        var conn = await _dataSource.OpenConnectionAsync(_cancellation);
-        var cmd = conn.CreateCommand(sql);
-        return cmd;
-    }
-
     public IEnumerable<ISchemaObject> AllObjects()
     {
         yield return new OutgoingEnvelopeTable(_durability, SchemaName);

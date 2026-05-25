@@ -88,7 +88,7 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
 
         await EnsureStorageExistsAsync(cancellationToken);
 
-        var cmd = (MySqlCommand)transaction.Connection!.CreateCommand();
+        await using var cmd = (MySqlCommand)transaction.Connection!.CreateCommand();
         cmd.Transaction = (MySqlTransaction)transaction;
         cmd.CommandText = _insertSql;
         cmd.Parameters.AddWithValue("@id", id);
@@ -105,7 +105,7 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
 
         var id = IdSource(saga);
 
-        var cmd = (MySqlCommand)transaction.Connection!.CreateCommand();
+        await using var cmd = (MySqlCommand)transaction.Connection!.CreateCommand();
         cmd.Transaction = (MySqlTransaction)transaction;
         cmd.CommandText = _updateSql;
         // MySQL JSON columns require string input, not binary
@@ -125,7 +125,7 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
     {
         await EnsureStorageExistsAsync(cancellationToken);
 
-        var cmd = (MySqlCommand)transaction.Connection!.CreateCommand();
+        await using var cmd = (MySqlCommand)transaction.Connection!.CreateCommand();
         cmd.Transaction = (MySqlTransaction)transaction;
         cmd.CommandText = _deleteSql;
         cmd.Parameters.AddWithValue("@id", IdSource(saga));
@@ -136,7 +136,7 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
     {
         await EnsureStorageExistsAsync(cancellationToken);
 
-        var cmd = (MySqlCommand)tx.Connection!.CreateCommand();
+        await using var cmd = (MySqlCommand)tx.Connection!.CreateCommand();
         cmd.Transaction = (MySqlTransaction)tx;
         cmd.CommandText = _loadSql;
         cmd.Parameters.AddWithValue("@id", id);
