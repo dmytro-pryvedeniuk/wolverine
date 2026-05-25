@@ -62,13 +62,14 @@ internal class DatabaseControlSender : ISender, IAsyncDisposable
 
         try
         {
-            await _transport.Database.DataSource.CreateCommand(
-                    $"insert into {_transport.TableName} (id, message_type, node_id, body, expires) values (@id, @messagetype, @node, @body, @expires)")
+            await using var cmd = _transport.Database.DataSource.CreateCommand(
+                $"insert into {_transport.TableName} (id, message_type, node_id, body, expires) values (@id, @messagetype, @node, @body, @expires)")
                 .With("id", envelope.Id)
                 .With("messagetype", envelope.MessageType!)
                 .With("node", _endpoint.NodeId)
                 .With("body", EnvelopeSerializer.Serialize(envelope))
-                .With("expires", DateTimeOffset.UtcNow.AddSeconds(30)).ExecuteNonQueryAsync(cancellationToken);
+                .With("expires", DateTimeOffset.UtcNow.AddSeconds(30));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {

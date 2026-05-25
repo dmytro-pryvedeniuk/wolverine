@@ -103,6 +103,7 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
             {
                 _receiver.Latch();
                 await _receiver.DrainAsync();
+                await _receiver.DisposeAsync();
             }
             catch (Exception e)
             {
@@ -119,6 +120,7 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
 
         _logger.LogInformation("Pausing message listening at {Uri}", Endpoint.Uri);
 
+        _restarter?.Dispose();
         _restarter = new Restarter(this, pauseTime);
     }
 

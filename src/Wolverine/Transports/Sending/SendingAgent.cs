@@ -401,7 +401,7 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
             try
             {
                 Unlatch();
-                _circuitWatcher?.SafeDispose();
+                _circuitWatcher?.Dispose();
                 _circuitWatcher = null;
             }
             finally

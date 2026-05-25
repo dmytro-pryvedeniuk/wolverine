@@ -417,17 +417,17 @@ FROM temp_pop_{_queueName}");
 
         try
         {
-            await conn.CreateCommand($@"
+            await using var cmd1 = conn.CreateCommand($@"
 DELETE FROM {_queueTableName}
 WHERE {DatabaseConstants.KeepUntil} IS NOT NULL
-AND {DatabaseConstants.KeepUntil} <= UTC_TIMESTAMP(6)")
-                .ExecuteNonQueryAsync(cancellationToken);
+AND {DatabaseConstants.KeepUntil} <= UTC_TIMESTAMP(6)");
+            await cmd1.ExecuteNonQueryAsync(cancellationToken);
 
-            await conn.CreateCommand($@"
+            await using var cmd2 = conn.CreateCommand($@"
 DELETE FROM {_queue.ScheduledTable.Identifier}
 WHERE {DatabaseConstants.KeepUntil} IS NOT NULL
-AND {DatabaseConstants.KeepUntil} <= UTC_TIMESTAMP(6)")
-                .ExecuteNonQueryAsync(cancellationToken);
+AND {DatabaseConstants.KeepUntil} <= UTC_TIMESTAMP(6)");
+            await cmd2.ExecuteNonQueryAsync(cancellationToken);
         }
         finally
         {

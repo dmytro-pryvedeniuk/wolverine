@@ -158,10 +158,10 @@ public abstract partial class MessageDatabase<T>
         await conn.OpenAsync(_cancellation);
         try
         {
-            await conn.CreateCommand(
-                    $"delete from {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} where {StorageConstants.TenantIdColumn} = @id")
-                .With("id", tenantId)
-                .ExecuteNonQueryAsync(_cancellation);
+            await using var cmd = conn.CreateCommand(
+                $"delete from {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} where {StorageConstants.TenantIdColumn} = @id")
+                .With("id", tenantId);
+            await cmd.ExecuteNonQueryAsync(_cancellation);
         }
         finally
         {
