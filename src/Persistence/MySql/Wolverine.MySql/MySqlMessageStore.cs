@@ -217,16 +217,12 @@ internal class MySqlMessageStore : MessageDatabase<MySqlConnection>
             await reader.CloseAsync();
         }
 
-        var longCount =
-            await CreateCommand($"SELECT COUNT(*) FROM {SchemaName}.{DatabaseConstants.OutgoingTable}")
-                .ExecuteScalarAsync();
-
+        await using var cmd1 = CreateCommand($"SELECT COUNT(*) FROM {SchemaName}.{DatabaseConstants.OutgoingTable}");
+        var longCount = await cmd1.ExecuteScalarAsync();
         counts.Outgoing = Convert.ToInt32(longCount);
 
-        var deadLetterCount =
-            await CreateCommand($"SELECT COUNT(*) FROM {SchemaName}.{DatabaseConstants.DeadLetterTable}")
-                .ExecuteScalarAsync();
-
+        await using var cmd2 = CreateCommand($"SELECT COUNT(*) FROM {SchemaName}.{DatabaseConstants.DeadLetterTable}");
+        var deadLetterCount = await cmd2.ExecuteScalarAsync();
         counts.DeadLetter = Convert.ToInt32(deadLetterCount);
 
         return counts;
@@ -298,7 +294,9 @@ internal class MySqlMessageStore : MessageDatabase<MySqlConnection>
 
     public override DbCommandBuilder ToCommandBuilder()
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         return new DbCommandBuilder(new MySqlCommand());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 
     public override async Task<bool> ExistsAsync(Envelope envelope, CancellationToken cancellation)
@@ -361,7 +359,9 @@ internal class MySqlMessageStore : MessageDatabase<MySqlConnection>
 
             if (gotLock)
             {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
                 var builder = new DbCommandBuilder(new MySqlCommand());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
                 WriteLoadScheduledEnvelopeSql(builder, DateTimeOffset.UtcNow);
                 await using var cmd = (MySqlCommand)builder.Compile();
                 cmd.Connection = conn;

@@ -103,15 +103,12 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
             {
                 _receiver.Latch();
                 await _receiver.DrainAsync();
-                await _receiver.DisposeAsync();
             }
             catch (Exception e)
             {
                 _logger.LogError(e, "Error trying to drain in flight messages for {Uri}", Destination);
             }
         }
-
-        _receiver = null;
 
         CircuitBreaker?.Reset();
 
