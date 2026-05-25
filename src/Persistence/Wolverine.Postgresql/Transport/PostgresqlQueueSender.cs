@@ -105,13 +105,14 @@ DO UPDATE SET {DatabaseConstants.Body} = :body, {DatabaseConstants.MessageType} 
     public async Task ScheduleRetryAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken);
-        await conn.CreateCommand($"delete from {_quotedStorageSchemaName}.{DatabaseConstants.IncomingTable} where id = :id;" + _writeDirectlyToTheScheduledTable)
+        await using var cmd = conn.CreateCommand(
+            $"delete from {_quotedStorageSchemaName}.{DatabaseConstants.IncomingTable} where id = :id;" + _writeDirectlyToTheScheduledTable)
             .With("id", envelope.Id)
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType!)
             .With("expires", envelope.DeliverBy!)
-            .With("time", envelope.ScheduledTime!)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("time", envelope.ScheduledTime!);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
 
         try
@@ -147,12 +148,11 @@ DO UPDATE SET {DatabaseConstants.Body} = :body, {DatabaseConstants.MessageType} 
     public async Task MoveFromOutgoingToQueueAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken);
-
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToQueueSql)
-                .With("id", envelope.Id)
-                .ExecuteNonQueryAsync(cancellationToken);
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToQueueSql)
+                .With("id", envelope.Id);
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException("No matching outgoing envelope");
         }
@@ -177,10 +177,10 @@ DO UPDATE SET {DatabaseConstants.Body} = :body, {DatabaseConstants.MessageType} 
 
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToScheduledSql)
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToScheduledSql)
                 .With("id", envelope.Id)
-                .With("time", envelope.ScheduledTime!.Value)
-                .ExecuteNonQueryAsync(cancellationToken);
+                .With("time", envelope.ScheduledTime!.Value);
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException($"No matching outgoing envelope for {envelope}");
         }
@@ -188,10 +188,10 @@ DO UPDATE SET {DatabaseConstants.Body} = :body, {DatabaseConstants.MessageType} 
         {
             if (e.Message.ContainsIgnoreCase("duplicate key value"))
             {
-                await conn.CreateCommand(
-                        $"delete from {_quotedStorageSchemaName}.{DatabaseConstants.OutgoingTable} where id = @id")
-                    .With("id", envelope.Id)
-                    .ExecuteNonQueryAsync(cancellationToken);
+                await using var cmd = conn.CreateCommand(
+                    $"delete from {_quotedStorageSchemaName}.{DatabaseConstants.OutgoingTable} where id = @id")
+                    .With("id", envelope.Id);
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
 
                 return;
             }
@@ -216,12 +216,12 @@ DO UPDATE SET {DatabaseConstants.Body} = :body, {DatabaseConstants.MessageType} 
             {
                 try
                 {
-                    await conn.CreateCommand(_writeDirectlyToQueueTableSql)
+                    await using var cmd = conn.CreateCommand(_writeDirectlyToQueueTableSql)
                         .With("id", envelope.Id)
                         .With("body", EnvelopeSerializer.Serialize(envelope))
                         .With("type", envelope.MessageType!)
-                        .With("expires", envelope.DeliverBy!)
-                        .ExecuteNonQueryAsync(cancellationToken);
+                        .With("expires", envelope.DeliverBy!);
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
                 }
                 catch (NpgsqlException e)
                 {
@@ -239,12 +239,13 @@ DO UPDATE SET {DatabaseConstants.Body} = :body, {DatabaseConstants.MessageType} 
 
     private async Task scheduleMessageAsync(Envelope envelope, CancellationToken cancellationToken, NpgsqlConnection conn)
     {
-        await conn.CreateCommand(_writeDirectlyToTheScheduledTable)
+        await using var cmd = conn.CreateCommand(_writeDirectlyToTheScheduledTable)
             .With("id", envelope.Id)
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType!)
             .With("expires", envelope.DeliverBy!)
-            .With("time", envelope.ScheduledTime!)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("time", envelope.ScheduledTime!);
+
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

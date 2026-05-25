@@ -84,10 +84,11 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
         if (id == null || id.Equals(default(TId))) throw new ArgumentOutOfRangeException(nameof(saga), "You must define the saga id when using the lightweight saga storage");
         
         await EnsureStorageExistsAsync(cancellationToken);
-        await transaction.CreateCommand(_insertSql).As<NpgsqlCommand>()
+        await using var cmd = transaction.CreateCommand(_insertSql);
+        cmd.As<NpgsqlCommand>()
             .With("id", id!)
-            .With("body", JsonSerializer.SerializeToUtf8Bytes(saga), NpgsqlDbType.Jsonb)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("body", JsonSerializer.SerializeToUtf8Bytes(saga), NpgsqlDbType.Jsonb);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         saga.Version = 1;
     }
@@ -97,11 +98,12 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
         await EnsureStorageExistsAsync(cancellationToken);
 
         var id = IdSource(saga);
-        var count = await transaction.CreateCommand(_updateSql).As<NpgsqlCommand>()
+        await using var cmd = transaction.CreateCommand(_updateSql);
+        cmd.As<NpgsqlCommand>()
             .With("body", JsonSerializer.SerializeToUtf8Bytes(saga), NpgsqlDbType.Jsonb)
             .With("id", id!)
-            .With("version", saga.Version)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("version", saga.Version);
+        var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         if (count == 0)
             throw new SagaConcurrencyException(
@@ -113,10 +115,10 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
     public async Task DeleteAsync(T saga, DbTransaction transaction, CancellationToken cancellationToken)
     {
         await EnsureStorageExistsAsync(cancellationToken);
-        await transaction
+        await using var cmd = transaction
             .CreateCommand(_deleteSql)
-            .With("id", IdSource(saga)!)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("id", IdSource(saga)!);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<T?> LoadAsync(TId id, DbTransaction tx, CancellationToken cancellationToken)

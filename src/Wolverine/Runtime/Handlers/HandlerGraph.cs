@@ -272,14 +272,24 @@ public partial class HandlerGraph : ICodeFileCollectionWithServices, IWithFailur
                 else
                 {
                     // TODO -- put this logic in JasperFx
-                    var logger = Container?.Services.GetService<ILoggerFactory>()?.CreateLogger<HandlerGraph>() ?? new Logger<HandlerGraph>(new LoggerFactory([new DebugLoggerProvider()]));
+                    LoggerFactory? ownFactory = null;
+                    var factory = Container?.Services.GetService<ILoggerFactory>()
+                        ?? (ownFactory = new LoggerFactory([new DebugLoggerProvider()]));
+                    try
+                    {
+                        var logger = factory.CreateLogger<HandlerGraph>();
 
-                    logger.LogDebug("Starting to compile chain {MessageType}", chain.MessageType.NameInCode());
+                        logger.LogDebug("Starting to compile chain {MessageType}", chain.MessageType.NameInCode());
 
-                    chain.InitializeSynchronously(Rules, this, Container!.Services);
-                    handler = chain.CreateHandler(Container!);
+                        chain.InitializeSynchronously(Rules, this, Container!.Services);
+                        handler = chain.CreateHandler(Container!);
 
-                    logger.LogDebug("Finished building the chain {MessageType}", chain.MessageType.NameInCode());
+                        logger.LogDebug("Finished building the chain {MessageType}", chain.MessageType.NameInCode());
+                    }
+                    finally
+                    {
+                        ownFactory?.Dispose();
+                    }
                 }
             }
         }
