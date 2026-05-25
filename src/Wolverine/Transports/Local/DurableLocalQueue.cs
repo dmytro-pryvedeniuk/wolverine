@@ -122,15 +122,16 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
         _restarter = new Restarter(this, pauseTime);
     }
 
-    public ValueTask StartAsync()
+    public async ValueTask StartAsync()
     {
+        if (_receiver != null)
+            await _receiver.DisposeAsync().ConfigureAwait(false);
         _receiver = new DurableReceiver(Endpoint, _runtime, Pipeline);
         Latched = false;
         _runtime.Tracker.Publish(new ListenerState(_receiver.Uri, Endpoint.EndpointName,
             ListeningStatus.Accepting));
         _restarter?.Dispose();
         _restarter = null;
-        return ValueTask.CompletedTask;
     }
 
     ListeningStatus IListenerCircuit.Status => Latched ? ListeningStatus.TooBusy : ListeningStatus.Accepting;

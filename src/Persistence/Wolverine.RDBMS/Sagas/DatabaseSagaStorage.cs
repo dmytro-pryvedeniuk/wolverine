@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Wolverine.Persistence.Sagas;
 
 namespace Wolverine.RDBMS.Sagas;
@@ -44,14 +45,13 @@ public class DatabaseSagaStorage<TId, TSaga> : ISagaStorage<TId, TSaga> where TS
         }
     }
 
-    public ValueTask DisposeAsync()
+    [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected", Justification = "Injected resources are owned")]
+    public async ValueTask DisposeAsync()
     {
+        if (_tx != null)
+            await _tx.DisposeAsync().ConfigureAwait(false);
         if (_connection != null)
-        {
-            return _connection.DisposeAsync();
-        }
-
-        return new ValueTask();
+            await _connection.DisposeAsync().ConfigureAwait(false);
     }
 
     public Task<TSaga?> LoadAsync(TId id, CancellationToken cancellationToken)

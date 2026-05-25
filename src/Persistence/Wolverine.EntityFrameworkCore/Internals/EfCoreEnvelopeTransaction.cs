@@ -61,7 +61,7 @@ public class EfCoreEnvelopeTransaction : IEnvelopeTransaction
             }
             var conn = DbContext.Database.GetDbConnection();
             var tx = DbContext.Database.CurrentTransaction!.GetDbTransaction();
-            var cmd = DatabasePersistence.BuildOutgoingStorageCommand(envelope, envelope.OwnerId, _database);
+            await using var cmd = DatabasePersistence.BuildOutgoingStorageCommand(envelope, envelope.OwnerId, _database);
             cmd.Transaction = tx;
             cmd.Connection = conn;
 
@@ -178,12 +178,14 @@ public class EfCoreEnvelopeTransaction : IEnvelopeTransaction
         
         if (_messaging.Envelope != null && _messaging.Envelope.Destination != null)
         {
-            var conn = DbContext.Database.GetDbConnection();
-            var tx = DbContext.Database.CurrentTransaction?.GetDbTransaction();
-            
             // Are we marking an existing envelope as persisted?
             if (_messaging.Envelope.WasPersistedInInbox)
             {
+#pragma warning disable IDISP001 // Dispose created
+                var conn = DbContext.Database.GetDbConnection();
+#pragma warning restore IDISP001 // Dispose created
+                var tx = DbContext.Database.CurrentTransaction?.GetDbTransaction();
+
                 var keepUntil =
                     DateTimeOffset.UtcNow.Add(_messaging.Runtime.Options.Durability.KeepAfterMessageHandling);
                 await using var cmd = conn.CreateCommand(

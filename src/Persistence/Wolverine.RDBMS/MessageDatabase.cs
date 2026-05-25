@@ -269,12 +269,12 @@ public abstract partial class MessageDatabase<T> : DatabaseBase<T>,
     {
         if (HasDisposed) return;
 
-        var impacted = await _dataSource
+        await using var cmd = _dataSource
             .CreateCommand(
                 $"update {QuotedSchemaName}.{DatabaseConstants.IncomingTable} set owner_id = 0 where owner_id = @owner and {DatabaseConstants.ReceivedAt} = @uri")
             .With("owner", ownerId)
-            .With("uri", receivedAt.ToString())
-            .ExecuteNonQueryAsync(_cancellation);
+            .With("uri", receivedAt.ToString());
+        var impacted = await cmd.ExecuteNonQueryAsync(_cancellation);
 
         if (impacted == 0) return;
 
@@ -315,8 +315,9 @@ public abstract partial class MessageDatabase<T> : DatabaseBase<T>,
             var tx = await conn.BeginTransactionAsync(_cancellation);
         
             var schema = SagaSchemaFor<TSaga, TId>();
-
+#pragma warning disable IDISP001 // Dispose created
             var transaction = new DatabaseEnvelopeTransaction(this, tx);
+#pragma warning restore IDISP001 // Dispose created
             await context.EnlistInOutboxAsync(transaction);
             return new DatabaseSagaStorage<TId, TSaga>(conn, tx, schema);
         }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using JasperFx.Blocks;
@@ -16,6 +17,7 @@ public class SocketListener : IListener, IDisposable
     private CancellationToken _cancellationToken;
     private TcpListener? _listener;
     private CancellationTokenSource? _listenerCancellation;
+    private CancellationTokenSource? _linkedListenerCancellation;
     private Task? _receivingLoop;
     private Block<Socket>? _socketHandling;
 
@@ -43,6 +45,8 @@ public class SocketListener : IListener, IDisposable
         _listenerCancellation?.Cancel();
         _listenerCancellation?.Dispose();
         _receiver.Dispose();
+        _linkedListenerCancellation?.Cancel();
+        _linkedListenerCancellation?.Dispose();
     }
 
     public Task<bool> TryRequeueAsync(Envelope envelope)
@@ -61,6 +65,7 @@ public class SocketListener : IListener, IDisposable
         }
 
         _listener?.Stop();
+        _listener?.Dispose();
         _listener = null;
 
         if (_receivingLoop != null)
@@ -102,11 +107,12 @@ public class SocketListener : IListener, IDisposable
         return DisposeAsync();
     }
 
+    [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning", Justification = "Part of ctor called once")]
     private void startListening(IReceiver callback)
     {
         _listenerCancellation = new CancellationTokenSource();
-        _cancellationToken = CancellationTokenSource.CreateLinkedTokenSource(_parentToken, _listenerCancellation.Token)
-            .Token;
+        _linkedListenerCancellation = CancellationTokenSource.CreateLinkedTokenSource(_parentToken, _listenerCancellation.Token);
+        _cancellationToken = _linkedListenerCancellation.Token;
 
         _listener = new TcpListener(new IPEndPoint(_ipaddr, _port));
         _listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);

@@ -14,6 +14,7 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
     private readonly IConsumer<ReadOnlySequence<byte>>? _consumer;
     private readonly IConsumer<ReadOnlySequence<byte>>? _retryConsumer;
     private readonly CancellationTokenSource _localCancellation;
+    private readonly CancellationTokenSource _combinedCancellation;
     private readonly Task? _receivingLoop;
     private readonly PulsarSender? _sender;
     private readonly bool _enableRequeue;
@@ -46,8 +47,7 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
         var mapper = endpoint.BuildMapper(runtime);
 
         _localCancellation = new CancellationTokenSource();
-
-        var combined = CancellationTokenSource.CreateLinkedTokenSource(_cancellation, _localCancellation.Token);
+        _combinedCancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation, _localCancellation.Token);
 
         _consumer = transport.Client!.NewConsumer()
             .SubscriptionName(endpoint.SubscriptionName)
@@ -67,7 +67,7 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
 
         _receivingLoop = Task.Run(async () =>
         {
-            await foreach (var message in _consumer.Messages(combined.Token))
+            await foreach (var message in _consumer.Messages(_combinedCancellation.Token))
             {
                 var envelope = new PulsarEnvelope(message)
                 {
@@ -79,7 +79,7 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
 
                 await receiver.ReceivedAsync(this, envelope);
             }
-        }, combined.Token);
+        }, _combinedCancellation.Token);
 
 
         if (NativeRetryLetterQueueEnabled)
@@ -87,7 +87,7 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
             _retryConsumer = createRetryConsumer(endpoint, transport);
             _receivingRetryLoop = Task.Run(async () =>
             {
-                await foreach (var message in _retryConsumer.Messages(combined.Token))
+                await foreach (var message in _retryConsumer.Messages(_combinedCancellation.Token))
                 {
                     var envelope = new PulsarEnvelope(message)
                     {
@@ -99,7 +99,7 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
 
                     await receiver.ReceivedAsync(this, envelope);
                 }
-            }, combined.Token);
+            }, _combinedCancellation.Token);
         }
     }
 
@@ -181,6 +181,8 @@ internal class PulsarListener : IListener, ISupportDeadLetterQueue, ISupportNati
     {
         await _localCancellation.CancelAsync();
         _localCancellation.Dispose();
+        await _combinedCancellation.CancelAsync();
+        _combinedCancellation.Dispose();
 
         if (_consumer != null)
         {

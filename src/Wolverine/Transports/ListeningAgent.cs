@@ -106,6 +106,7 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
 
     public void Dispose()
     {
+        _restarter?.Dispose();
         _receiver?.Dispose();
         _circuitBreaker?.SafeDisposeSynchronously();
         _backPressureAgent?.SafeDispose();
@@ -362,6 +363,7 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
 
         _logger.LogInformation("Pausing message listening at {Uri}", Uri);
         _runtime.Tracker.Publish(new ListenerState(Uri, Endpoint.EndpointName, ListeningStatus.Stopped));
+        _restarter?.Dispose();
         _restarter = new Restarter(this, pauseTime);
     }
 
