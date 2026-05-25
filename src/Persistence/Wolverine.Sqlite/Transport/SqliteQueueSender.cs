@@ -96,12 +96,12 @@ values (@id, @body, @type, @time)
     private async Task writeToScheduledTableAsync(Envelope envelope, CancellationToken cancellationToken, DbConnection conn)
     {
         var scheduledTime = envelope.ScheduledTime ?? DateTimeOffset.UtcNow;
-        await conn.CreateCommand(_writeDirectlyToTheScheduledTable)
+        await using var cmd = conn.CreateCommand(_writeDirectlyToTheScheduledTable)
             .With("id", $"{envelope.Id:D}")
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType!)
-            .With("time", scheduledTime.UtcDateTime.ToString(SqliteDateTimeFormat))
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("time", scheduledTime.UtcDateTime.ToString(SqliteDateTimeFormat));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async ValueTask SendAsync(Envelope envelope, CancellationToken cancellation)
@@ -120,24 +120,24 @@ values (@id, @body, @type, @time)
 
     private async Task sendAsync(Envelope envelope, DbConnection conn, CancellationToken cancellation)
     {
-        await conn.CreateCommand(_writeDirectlyToQueueTableSql)
+        await using var cmd = conn.CreateCommand(_writeDirectlyToQueueTableSql)
             .With("id", $"{envelope.Id:D}")
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType!)
-            .With("expires", (envelope.DeliverBy?.UtcDateTime.ToString(SqliteDateTimeFormat))!)
-            .ExecuteNonQueryAsync(cancellation);
+            .With("expires", (envelope.DeliverBy?.UtcDateTime.ToString(SqliteDateTimeFormat))!);            ;
+        await cmd.ExecuteNonQueryAsync(cancellation);
     }
 
     public async Task ScheduleRetryAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        await conn.CreateCommand(_deleteFromIncomingAndScheduleSql)
+        await using var cmd = conn.CreateCommand(_deleteFromIncomingAndScheduleSql)
             .With("id", $"{envelope.Id:D}")
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType!)
-            .With("time", (envelope.ScheduledTime ?? DateTimeOffset.UtcNow).UtcDateTime.ToString(SqliteDateTimeFormat))
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("time", (envelope.ScheduledTime ?? DateTimeOffset.UtcNow).UtcDateTime.ToString(SqliteDateTimeFormat));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async ValueTask SendAsync(Envelope envelope)
@@ -165,9 +165,9 @@ values (@id, @body, @type, @time)
 
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToQueueSql)
-                .With("id", $"{envelope.Id:D}")
-                .ExecuteNonQueryAsync(cancellationToken);
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToQueueSql)
+                .With("id", $"{envelope.Id:D}");
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException("No matching outgoing envelope");
         }
@@ -187,10 +187,10 @@ values (@id, @body, @type, @time)
 
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToScheduledSql)
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToScheduledSql)
                 .With("id", $"{envelope.Id:D}")
-                .With("time", envelope.ScheduledTime!.Value.UtcDateTime.ToString(SqliteDateTimeFormat))
-                .ExecuteNonQueryAsync(cancellationToken);
+                .With("time", envelope.ScheduledTime!.Value.UtcDateTime.ToString(SqliteDateTimeFormat));
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException($"No matching outgoing envelope for {envelope}");
         }
@@ -198,9 +198,10 @@ values (@id, @body, @type, @time)
         {
             if (e.Message.ContainsIgnoreCase("UNIQUE constraint failed"))
             {
-                await conn.CreateCommand($"DELETE FROM {DatabaseConstants.OutgoingTable} WHERE lower(id) = lower(@id)")
-                    .With("id", $"{envelope.Id:D}")
-                    .ExecuteNonQueryAsync(cancellationToken);
+                await using var cmd = conn.CreateCommand(
+                    $"DELETE FROM {DatabaseConstants.OutgoingTable} WHERE lower(id) = lower(@id)")
+                    .With("id", $"{envelope.Id:D}");
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
 
                 return;
             }

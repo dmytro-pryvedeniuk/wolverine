@@ -257,8 +257,8 @@ public class SqliteQueue : Endpoint, IBrokerQueue, IDatabaseBackedEndpoint
 
             try
             {
-                var result = await conn.CreateCommand($"select count(*) from {QueueTable.Identifier}")
-                    .ExecuteScalarAsync();
+                await using var cmd = conn.CreateCommand($"select count(*) from {QueueTable.Identifier}");
+                var result = await cmd.ExecuteScalarAsync();
                 count += Convert.ToInt64(result);
             }
             catch
@@ -278,8 +278,8 @@ public class SqliteQueue : Endpoint, IBrokerQueue, IDatabaseBackedEndpoint
             await using var conn = await source.OpenConnectionAsync().ConfigureAwait(false);
             try
             {
-                var result = await conn.CreateCommand($"select count(*) from {ScheduledTable.Identifier}")
-                    .ExecuteScalarAsync();
+                await using var cmd = conn.CreateCommand($"select count(*) from {ScheduledTable.Identifier}");
+                var result = await cmd.ExecuteScalarAsync();
                 count += Convert.ToInt64(result);
             }
             catch
