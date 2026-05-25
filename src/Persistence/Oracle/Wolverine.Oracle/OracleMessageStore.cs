@@ -353,10 +353,9 @@ internal partial class OracleMessageStore : IMessageDatabase, IMessageInbox, IMe
     // IMessageDatabase - extra methods
     public Weasel.Core.DbCommandBuilder ToCommandBuilder()
     {
-        // The IMessageDatabase interface requires DbCommandBuilder, but we create an OracleCommandBuilder
-        // internally. Return a DbCommandBuilder that uses Oracle's OracleCommand as the underlying command.
-        // Our dead letter methods use ToOracleCommandBuilder() instead.
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         return new Weasel.Core.DbCommandBuilder(CreateConnection());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 
     internal Weasel.Oracle.CommandBuilder ToOracleCommandBuilder()
@@ -412,14 +411,14 @@ internal partial class OracleMessageStore : IMessageDatabase, IMessageInbox, IMe
             cmd.CommandText =
                 $"INSERT INTO {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) VALUES (:id, :json)";
             cmd.With("id", Guid.NewGuid());
-            cmd.Parameters.Add(new OracleParameter("json", OracleDbType.Blob) { Value = json });
+            cmd.With("json", json, OracleDbType.Blob);
         }
         else
         {
             cmd.CommandText =
                 $"INSERT INTO {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) VALUES (:id, :json, :message)";
             cmd.With("id", Guid.NewGuid());
-            cmd.Parameters.Add(new OracleParameter("json", OracleDbType.Blob) { Value = json });
+            cmd.With("json", json, OracleDbType.Blob);
             cmd.With("message", messageTypeName);
         }
 

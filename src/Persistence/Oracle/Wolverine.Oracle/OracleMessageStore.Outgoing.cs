@@ -33,11 +33,11 @@ internal partial class OracleMessageStore
             $"INSERT INTO {SchemaName}.{DatabaseConstants.OutgoingTable} ({DatabaseConstants.OutgoingFields}) " +
             "VALUES (:body, :id, :ownerId, :destination, :deliverBy, :attempts, :messageType)");
 
-        cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = data });
+        cmd.With("body", data, OracleDbType.Blob);
         cmd.With("id", envelope.Id);
         cmd.With("ownerId", ownerId);
         cmd.With("destination", envelope.Destination!.ToString());
-        cmd.Parameters.Add(new OracleParameter("deliverBy", OracleDbType.TimeStampTZ) { Value = (object?)envelope.DeliverBy ?? DBNull.Value });
+        cmd.With("deliverBy", envelope.DeliverBy! , OracleDbType.TimeStampTZ);
         cmd.With("attempts", envelope.Attempts);
         cmd.With("messageType", envelope.MessageType!);
 
@@ -123,11 +123,11 @@ internal partial class OracleMessageStore
                 "VALUES (:body, :id, :ownerId, :destination, :deliverBy, :attempts, :messageType)");
             cmd.Transaction = (OracleTransaction)tx;
 
-            cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = data });
+            cmd.With("body", data, OracleDbType.Blob);
             cmd.With("id", envelope.Id);
             cmd.With("ownerId", envelope.OwnerId);
             cmd.With("destination", envelope.Destination!.ToString());
-            cmd.Parameters.Add(new OracleParameter("deliverBy", OracleDbType.TimeStampTZ) { Value = (object?)envelope.DeliverBy ?? DBNull.Value });
+            cmd.With("deliverBy", envelope.DeliverBy! , OracleDbType.TimeStampTZ);
             cmd.With("attempts", envelope.Attempts);
             cmd.With("messageType", envelope.MessageType!);
 

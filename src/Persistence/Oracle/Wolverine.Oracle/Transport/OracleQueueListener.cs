@@ -171,9 +171,9 @@ internal class OracleQueueListener : IListener
                     await using var insertCmd = CreateCmd(
                         $"INSERT INTO {_queueTableName} (id, body, message_type, keep_until) VALUES (:id, :body, :type, :keepUntil)");
                     insertCmd.With("id", idsToMove[i]);
-                    insertCmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = bodies[i] });
+                    insertCmd.With("body", bodies[i], OracleDbType.Blob);
                     insertCmd.With("type", messageTypes[i]);
-                    insertCmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)keepUntils[i] ?? DBNull.Value });
+                    insertCmd.With("keepUntil", keepUntils[i]! , OracleDbType.TimeStampTZ);
                     await insertCmd.ExecuteNonQueryAsync(cancellationToken);
                 }
                 catch (OracleException ex) when (ex.Number == 1)
@@ -314,10 +314,10 @@ internal class OracleQueueListener : IListener
                     "VALUES (:id, 'Incoming', :ownerId, :body, :messageType, :receivedAt, :keepUntil)");
                 insertCmd.With("id", ids[i]);
                 insertCmd.With("ownerId", settings.AssignedNodeNumber);
-                insertCmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = bodyList[i] });
+                insertCmd.With("body", bodyList[i], OracleDbType.Blob);
                 insertCmd.With("messageType", messageTypeList[i]);
                 insertCmd.With("receivedAt", Address.ToString());
-                insertCmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)keepUntilList[i] ?? DBNull.Value });
+                insertCmd.With("keepUntil", keepUntilList[i]! , OracleDbType.TimeStampTZ);
                 await insertCmd.ExecuteNonQueryAsync(cancellationToken);
 
                 try
