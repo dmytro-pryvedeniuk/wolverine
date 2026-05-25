@@ -66,8 +66,10 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
         if (tx?.Connection is SqliteConnection)
         {
             var table = (Table)Table;
-            var tableExists = await tx.CreateCommand("select count(*) from sqlite_master where type = 'table' and name = @name")
-                .With("name", table.Identifier.Name)
+            await using var cmd = tx.CreateCommand(
+                "select count(*) from sqlite_master where type = 'table' and name = @name")
+                .With("name", table.Identifier.Name);
+            var tableExists = await cmd
                 .ExecuteScalarAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -75,7 +77,8 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
             {
                 var createSql = table.ToBasicCreateTableSql();
 
-                await tx.CreateCommand(createSql)
+                await using var cmd2 = tx.CreateCommand(createSql);
+                await cmd2
                     .ExecuteNonQueryAsync(cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -132,10 +135,10 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
             throw new InvalidOperationException("Saga id cannot be null or empty");
         }
 
-        await tx.CreateCommand(_insertSql)
+        await using var cmd = tx.CreateCommand(_insertSql)
             .With("id", id.ToString()!)
-            .With("body", json)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("body", json);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         document.Version = 1;
     }
@@ -172,11 +175,11 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
         var json = JsonSerializer.Serialize(document);
         var id = IdSource(document);
 
-        var count = await tx.CreateCommand(_updateSql)
+        await using var cmd = tx.CreateCommand(_updateSql)
             .With("id", id?.ToString() ?? throw new InvalidOperationException("Saga id cannot be null"))
             .With("body", json)
-            .With("version", document.Version)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("version", document.Version);
+        var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         if (count == 0)
         {
@@ -193,8 +196,8 @@ public class DatabaseSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : 
 
         var id = IdSource(document);
 
-        await tx.CreateCommand(_deleteSql)
-            .With("id", id?.ToString() ?? throw new InvalidOperationException("Saga id cannot be null"))
-            .ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = tx.CreateCommand(_deleteSql)
+            .With("id", id?.ToString() ?? throw new InvalidOperationException("Saga id cannot be null"));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

@@ -88,7 +88,7 @@ public class EfCoreEnvelopeTransaction : IEnvelopeTransaction
             }
             var conn = DbContext.Database.GetDbConnection();
             var tx = DbContext.Database.CurrentTransaction!.GetDbTransaction();
-            var cmd = DatabasePersistence.BuildOutgoingStorageCommand(envelopes, envelopes[0].OwnerId, _database);
+            await using var cmd = DatabasePersistence.BuildOutgoingStorageCommand(envelopes, envelopes[0].OwnerId, _database);
             cmd.Transaction = tx;
             cmd.Connection = conn;
 

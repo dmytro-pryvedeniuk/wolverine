@@ -197,22 +197,27 @@ public abstract partial class MessageDatabase<T>
         try
         {
             var tx = await conn.BeginTransactionAsync(_cancellation);
-            using var cmd1 = tx.CreateCommand($"delete from {QuotedSchemaName}.{DatabaseConstants.OutgoingTable}");
-            await cmd1.ExecuteNonQueryAsync(_cancellation);
+            await using var outgoingCmd = tx.CreateCommand(
+                $"delete from {QuotedSchemaName}.{DatabaseConstants.OutgoingTable}");
+            await outgoingCmd.ExecuteNonQueryAsync(_cancellation);
 
-            using var cmd2 = tx.CreateCommand($"delete from {QuotedSchemaName}.{DatabaseConstants.IncomingTable}");
-            await cmd2.ExecuteNonQueryAsync(_cancellation);
+            await using var incomingCmd = tx.CreateCommand(
+                $"delete from {QuotedSchemaName}.{DatabaseConstants.IncomingTable}");
+            await incomingCmd.ExecuteNonQueryAsync(_cancellation);
 
-            using var cmd3 = tx.CreateCommand($"delete from {QuotedSchemaName}.{DatabaseConstants.DeadLetterTable}");
-            await cmd3.ExecuteNonQueryAsync(_cancellation);
+            await using var deadLetterCmd = tx.CreateCommand(
+                $"delete from {QuotedSchemaName}.{DatabaseConstants.DeadLetterTable}");
+            await deadLetterCmd.ExecuteNonQueryAsync(_cancellation);
 
             if (_settings.Role == MessageStoreRole.Main)
             {
-                using var cmd4 = tx.CreateCommand($"delete from {QuotedSchemaName}.{DatabaseConstants.AgentRestrictionsTableName}");
-                await cmd4.ExecuteNonQueryAsync(_cancellation);
+                await using var restrictionsCmd = tx.CreateCommand(
+                    $"delete from {QuotedSchemaName}.{DatabaseConstants.AgentRestrictionsTableName}");
+                await restrictionsCmd.ExecuteNonQueryAsync(_cancellation);
 
-                using var cmd5 = tx.CreateCommand($"delete from {QuotedSchemaName}.{DatabaseConstants.NodeRecordTableName}");
-                await cmd5.ExecuteNonQueryAsync(_cancellation);
+                await using var nodeRecordCmd = tx.CreateCommand(
+                    $"delete from {QuotedSchemaName}.{DatabaseConstants.NodeRecordTableName}");
+                await nodeRecordCmd.ExecuteNonQueryAsync(_cancellation);
 
                 // Clear the dynamic-listener registry too, so test hosts that call
                 // ResetResourceState / ClearAllAsync get a truly clean slate. Only
@@ -220,8 +225,9 @@ public abstract partial class MessageDatabase<T>
                 // wolverine_listeners table doesn't exist.
                 if (Durability.EnableDynamicListeners)
                 {
-                    using var cmd6 = tx.CreateCommand($"delete from {QuotedSchemaName}.{DatabaseConstants.ListenersTableName}");
-                    await cmd6.ExecuteNonQueryAsync(_cancellation);
+                    await using var listenersCmd = tx.CreateCommand(
+                        $"delete from {QuotedSchemaName}.{DatabaseConstants.ListenersTableName}");
+                    await listenersCmd.ExecuteNonQueryAsync(_cancellation);
                 }
             }
 

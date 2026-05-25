@@ -187,8 +187,8 @@ select count(*) from #temp_move_{queue.Name}
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        var count = (int)await conn.CreateCommand(_moveScheduledToReadyQueueSql)
-            .ExecuteScalarAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand(_moveScheduledToReadyQueueSql);
+        var count = (int)await cmd.ExecuteScalarAsync(cancellationToken);
 
         await conn.CloseAsync();
 
@@ -253,10 +253,11 @@ select count(*) from #temp_move_{queue.Name}
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        return await conn
+        await using var cmd = conn
             .CreateCommand(_tryPopMessagesDirectlySql)
-            .With("count", count)
-            .FetchListAsync<Envelope>(async reader =>
+            .With("count", count);
+        return await cmd
+            .FetchListAsync(async reader =>
             {
                 var data = await reader.GetFieldValueAsync<byte[]>(0, cancellationToken);
                 try
@@ -279,10 +280,12 @@ select count(*) from #temp_move_{queue.Name}
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        return await conn
+        await using var cmd = conn
             .CreateCommand(_tryPopMessagesToInboxSql)
             .With("count", count)
-            .With("node", settings.AssignedNodeNumber)
+            .With("node", settings.AssignedNodeNumber);
+
+        return await cmd
             .FetchListAsync<Envelope>(async reader =>
             {
                 var data = await reader.GetFieldValueAsync<byte[]>(0, cancellationToken);

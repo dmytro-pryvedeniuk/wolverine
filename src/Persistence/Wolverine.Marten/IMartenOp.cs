@@ -572,7 +572,9 @@ public class StoreDoc<T> : DocumentOp where T : notnull
 
     public override void Execute(IDocumentSession session)
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         ResolveSession(session).Store(_document);
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 }
 
@@ -598,7 +600,9 @@ public class StoreManyDocs<T> : DocumentsOp where T : notnull
 
     public override void Execute(IDocumentSession session)
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         ResolveSession(session).Store(Documents.Cast<T>());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 }
 
@@ -624,7 +628,9 @@ public class StoreObjects : DocumentsOp
 
     public override void Execute(IDocumentSession session)
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         ResolveSession(session).StoreObjects(Documents);
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 }
 
@@ -644,7 +650,9 @@ public class InsertDoc<T> : DocumentOp where T : notnull
 
     public override void Execute(IDocumentSession session)
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         ResolveSession(session).Insert(_document);
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 }
 
@@ -664,7 +672,9 @@ public class UpdateDoc<T> : DocumentOp where T : notnull
 
     public override void Execute(IDocumentSession session)
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         ResolveSession(session).Update(_document);
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 }
 
@@ -684,7 +694,9 @@ public class DeleteDoc<T> : DocumentOp where T : notnull
 
     public override void Execute(IDocumentSession session)
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         ResolveSession(session).Delete(_document);
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 }
 

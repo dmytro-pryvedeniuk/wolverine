@@ -144,7 +144,7 @@ internal class MySqlMessageStore : MessageDatabase<MySqlConnection>
     {
         if (ids.Length == 0) return;
 
-        using var cmd = (MySqlCommand)tx.Connection!.CreateCommand();
+        await using var cmd = (MySqlCommand)tx.Connection!.CreateCommand();
         cmd.Transaction = (MySqlTransaction)tx;
 
         var placeholders = MySqlCommandExtensions.WithIdList(cmd, "id", ids);

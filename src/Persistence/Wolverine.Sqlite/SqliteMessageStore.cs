@@ -162,12 +162,13 @@ internal class SqliteMessageStore : MessageDatabase<SqliteConnection>
         await conn.CloseAsync();
     }
 
-    protected override Task deleteMany(DbTransaction tx, Guid[] ids, DbObjectName tableName,
+    protected override async Task deleteMany(DbTransaction tx, Guid[] ids, DbObjectName tableName,
         string idColumnName)
     {
         var idList = string.Join(",", ids.Select(id => $"'{id:D}'"));
-        return tx.CreateCommand($"delete from {tableName.QualifiedName} where lower({idColumnName}) IN ({idList})")
-            .ExecuteNonQueryAsync();
+        await using var cmd = tx.CreateCommand(
+            $"delete from {tableName.QualifiedName} where lower({idColumnName}) IN ({idList})");
+        await cmd.ExecuteNonQueryAsync();
     }
 
     // Polling lock: delegate to the AdvisoryLock instance. The previous override here
@@ -260,14 +261,12 @@ internal class SqliteMessageStore : MessageDatabase<SqliteConnection>
             await reader.CloseAsync();
         }
 
-        var longCount = await CreateCommand($"select count(*) from {DatabaseConstants.OutgoingTable}")
-            .ExecuteScalarAsync();
-
+        await using var countCmd = CreateCommand($"select count(*) from {DatabaseConstants.OutgoingTable}");
+        var longCount = await countCmd.ExecuteScalarAsync();
         counts.Outgoing = Convert.ToInt32(longCount);
 
-        var deadLetterCount = await CreateCommand($"select count(*) from {DatabaseConstants.DeadLetterTable}")
-            .ExecuteScalarAsync();
-
+        await using var deadLetterCountCmd = CreateCommand($"select count(*) from {DatabaseConstants.DeadLetterTable}");
+        var deadLetterCount = await deadLetterCountCmd.ExecuteScalarAsync();
         counts.DeadLetter = Convert.ToInt32(deadLetterCount);
 
         return counts;
@@ -291,8 +290,9 @@ internal class SqliteMessageStore : MessageDatabase<SqliteConnection>
         if (HasDisposed) return;
 
         var ids = string.Join(",", envelopes.Select(e => $"'{e.Id:D}'"));
-        await CreateCommand($"delete from {DatabaseConstants.OutgoingTable} WHERE lower(id) IN ({ids})")
-            .ExecuteNonQueryAsync(_cancellation);
+        await using var cmd = CreateCommand(
+            $"delete from {DatabaseConstants.OutgoingTable} WHERE lower(id) IN ({ids})");
+        await cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
     protected override string determineOutgoingEnvelopeSql(DurabilitySettings settings)
@@ -304,15 +304,17 @@ internal class SqliteMessageStore : MessageDatabase<SqliteConnection>
     public override async Task<IReadOnlyList<Envelope>> LoadPageOfGloballyOwnedIncomingAsync(Uri listenerAddress,
         int limit)
     {
-        return await CreateCommand(_findAtLargeEnvelopesSql)
+        await using var cmd = CreateCommand(_findAtLargeEnvelopesSql)
             .With("address", listenerAddress.ToString())
-            .With("limit", limit)
-            .FetchListAsync(r => DatabasePersistence.ReadIncomingAsync(r));
+            .With("limit", limit);
+        return await cmd.FetchListAsync(r => DatabasePersistence.ReadIncomingAsync(r));
     }
 
     public override DbCommandBuilder ToCommandBuilder()
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         return new DbCommandBuilder(new SqliteCommand());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 
     public override void WriteLoadScheduledEnvelopeSql(DbCommandBuilder builder, DateTimeOffset utcNow)
@@ -384,20 +386,20 @@ internal class SqliteMessageStore : MessageDatabase<SqliteConnection>
 
         if (Durability.MessageIdentity == MessageIdentity.IdOnly)
         {
-            var count = await conn
-                .CreateCommand($"select count(id) from {DatabaseConstants.IncomingTable} where id = @id")
-                .With("id", envelope.Id)
-                .ExecuteScalarAsync(cancellation);
+            await using var cmd = conn.CreateCommand(
+                $"select count(id) from {DatabaseConstants.IncomingTable} where id = @id")
+                .With("id", envelope.Id);
+            var count = await cmd.ExecuteScalarAsync(cancellation);
 
             return Convert.ToInt64(count) > 0;
         }
         else
         {
-            var count = await conn
-                .CreateCommand($"select count(id) from {DatabaseConstants.IncomingTable} where id = @id and {DatabaseConstants.ReceivedAt} = @destination")
+            await using var cmd = conn.CreateCommand(
+                $"select count(id) from {DatabaseConstants.IncomingTable} where id = @id and {DatabaseConstants.ReceivedAt} = @destination")
                 .With("id", envelope.Id)
-                .With("destination", envelope.Destination!.ToString())
-                .ExecuteScalarAsync(cancellation);
+                .With("destination", envelope.Destination!.ToString());
+            var count = await cmd.ExecuteScalarAsync(cancellation);
 
             return Convert.ToInt64(count) > 0;
         }
@@ -410,20 +412,20 @@ internal class SqliteMessageStore : MessageDatabase<SqliteConnection>
 
         if (table.MessageTypeColumnName.IsEmpty())
         {
-            await conn.CreateCommand(
-                    $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) values (@id, @json)")
+            await using var cmd = conn.CreateCommand(
+                $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) values (@id, @json)")
                 .With("id", Guid.NewGuid().ToString())
-                .With("json", System.Text.Encoding.UTF8.GetString(json))
-                .ExecuteNonQueryAsync(token);
+                .With("json", System.Text.Encoding.UTF8.GetString(json));
+            await cmd.ExecuteNonQueryAsync(token);
         }
         else
         {
-            await conn.CreateCommand(
-                    $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) values (@id, @json, @message)")
+            await using var cmd = conn.CreateCommand(
+                $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) values (@id, @json, @message)")
                 .With("id", Guid.NewGuid().ToString())
                 .With("json", System.Text.Encoding.UTF8.GetString(json))
-                .With("message", messageTypeName)
-                .ExecuteNonQueryAsync(token);
+                .With("message", messageTypeName);
+            await cmd.ExecuteNonQueryAsync(token);
         }
 
         await conn.CloseAsync();

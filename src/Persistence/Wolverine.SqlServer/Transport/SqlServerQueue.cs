@@ -266,8 +266,8 @@ public class SqlServerQueue : Endpoint, IBrokerQueue, IDatabaseBackedEndpoint
 
             try
             {
-                count += (int)(await conn.CreateCommand($"select count(*) from {QueueTable.Identifier}")
-                    .ExecuteScalarAsync())!;
+                await using var cmd = conn.CreateCommand($"select count(*) from {QueueTable.Identifier}");
+                count += (int)(await cmd.ExecuteScalarAsync())!;
             }
             finally
             {
@@ -288,8 +288,8 @@ public class SqlServerQueue : Endpoint, IBrokerQueue, IDatabaseBackedEndpoint
 
             try
             {
-                count += (int)(await conn.CreateCommand($"select count(*) from {ScheduledTable.Identifier}")
-                    .ExecuteScalarAsync())!;
+                await using var cmd = conn.CreateCommand($"select count(*) from {ScheduledTable.Identifier}");
+                count += (int)(await cmd.ExecuteScalarAsync())!;
             }
             finally
             {
@@ -414,12 +414,12 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
             try
             {
                 await conn.OpenAsync(cancellationToken);
-                await conn.CreateCommand(_writeDirectlyToQueueTableSql!)
+                await using var cmd = conn.CreateCommand(_writeDirectlyToQueueTableSql!)
                     .With("id", envelope.Id)
                     .With("body", EnvelopeSerializer.Serialize(envelope))
                     .With("type", envelope.MessageType!)
-                    .With("expires", envelope.DeliverBy!)
-                    .ExecuteNonQueryAsync(cancellationToken);
+                    .With("expires", envelope.DeliverBy!);
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
                 await conn.CloseAsync();
             }
             catch (SqlException e)
@@ -435,13 +435,13 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
     {
         buildTestSqlIfMissing();
         await conn.OpenAsync(cancellationToken);
-        await conn.CreateCommand(_writeDirectlyToTheScheduledTable!)
+        await using var cmd = conn.CreateCommand(_writeDirectlyToTheScheduledTable!)
             .With("id", envelope.Id)
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType!)
             .With("expires", envelope.DeliverBy!)
-            .With("time", envelope.ScheduledTime!)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("time", envelope.ScheduledTime!);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
         await conn.CloseAsync();
     }
 
@@ -460,9 +460,9 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
 
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToQueueSql!)
-                .With("id", envelope.Id)
-                .ExecuteNonQueryAsync(cancellationToken);
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToQueueSql!)
+                .With("id", envelope.Id);
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException("No matching outgoing envelope");
         }
@@ -487,10 +487,10 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
         await conn.OpenAsync(cancellationToken);
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToScheduledSql!)
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToScheduledSql!)
                 .With("id", envelope.Id)
-                .With("time", envelope.ScheduledTime!.Value)
-                .ExecuteNonQueryAsync(cancellationToken);
+                .With("time", envelope.ScheduledTime!.Value);
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException($"No matching outgoing envelope for {envelope}");
         }
@@ -498,10 +498,10 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
         {
             if (e.Message.ContainsIgnoreCase("Violation of PRIMARY KEY constraint"))
             {
-                await conn.CreateCommand(
-                        $"delete from {Parent.MessageStorageSchemaName}.{DatabaseConstants.OutgoingTable} where id = @id")
-                    .With("id", envelope.Id)
-                    .ExecuteNonQueryAsync(cancellationToken);
+                await using var cmd = conn.CreateCommand(
+                    $"delete from {Parent.MessageStorageSchemaName}.{DatabaseConstants.OutgoingTable} where id = @id")
+                    .With("id", envelope.Id);
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
 
                 return;
             }
@@ -518,8 +518,8 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
         await using var conn = new SqlConnection(Parent.Settings.ConnectionString);
 
         await conn.OpenAsync(cancellationToken);
-        var count = (int)await conn.CreateCommand(_moveScheduledToReadyQueueSql!)
-            .ExecuteScalarAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand(_moveScheduledToReadyQueueSql!);
+        var count = (int)await cmd.ExecuteScalarAsync(cancellationToken);
 
         await conn.CloseAsync();
 
@@ -543,10 +543,11 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
         await using var conn = new SqlConnection(Parent.Settings.ConnectionString);
         await conn.OpenAsync(cancellationToken);
 
-        return await conn
+        await using var cmd = conn
             .CreateCommand(_tryPopMessagesDirectlySql!)
-            .With("count", count)
-            .FetchListAsync<Envelope>(async reader =>
+            .With("count", count);
+        return await cmd
+            .FetchListAsync(async reader =>
             {
                 var data = await reader.GetFieldValueAsync<byte[]>(0, cancellationToken);
                 try
@@ -569,10 +570,12 @@ IF (@NOCOUNT = 'OFF') SET NOCOUNT OFF;";
         await using var conn = new SqlConnection(Parent.Settings.ConnectionString);
         await conn.OpenAsync(cancellationToken);
 
-        return await conn
+        await using var cmd = conn
             .CreateCommand(_tryPopMessagesToInboxSql!)
             .With("count", count)
-            .With("node", settings.AssignedNodeNumber)
+            .With("node", settings.AssignedNodeNumber);
+
+        return await cmd
             .FetchListAsync<Envelope>(async reader =>
             {
                 var data = await reader.GetFieldValueAsync<byte[]>(0, cancellationToken);
