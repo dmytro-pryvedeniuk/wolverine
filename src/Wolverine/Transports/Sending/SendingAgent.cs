@@ -60,7 +60,7 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
         {
             d.SafeDispose();
         }
-
+        _circuitWatcher?.Dispose();
         _sending.Dispose();
         _failureCountLock.Dispose();
     }

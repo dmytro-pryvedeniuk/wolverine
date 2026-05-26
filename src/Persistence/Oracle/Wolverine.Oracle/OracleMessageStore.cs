@@ -226,7 +226,8 @@ internal partial class OracleMessageStore : IMessageDatabase, IMessageInbox, IMe
     public async ValueTask DisposeAsync()
     {
         _hasDisposed = true;
-        await AdvisoryLock.DisposeAsync();
+        await AdvisoryLock.DisposeAsync().ConfigureAwait(false);
+        await _dataSource.DisposeAsync().ConfigureAwait(false);
     }
 
     public OracleConnection CreateConnection()
@@ -456,8 +457,9 @@ internal partial class OracleMessageStore : IMessageDatabase, IMessageInbox, IMe
             var tx = await conn.BeginTransactionAsync(_cancellation);
 
             var schema = SagaSchemaFor<TSaga, TId>();
-
+#pragma warning disable IDISP001 // Dispose created
             var transaction = new DatabaseEnvelopeTransaction(this, tx);
+#pragma warning restore IDISP001 // Dispose created
             await context.EnlistInOutboxAsync(transaction);
             return new DatabaseSagaStorage<TId, TSaga>(conn, tx, schema);
         }

@@ -64,6 +64,12 @@ public class SocketListener : IListener, IDisposable
             _listenerCancellation.Dispose();
         }
 
+        if (_linkedListenerCancellation is not null)
+        {
+            await _linkedListenerCancellation.CancelAsync();
+            _linkedListenerCancellation.Dispose();
+        }
+
         _listener?.Stop();
         _listener?.Dispose();
         _listener = null;

@@ -240,8 +240,10 @@ internal class PostgresqlBackedPersistence : IPostgresqlBackedPersistence, IWolv
         var settings = buildMainDatabaseSettings();
 
         var sagaTables = runtime.Services.GetServices<SagaTableDefinition>().ToArray();
-        
+
+#pragma warning disable IDISP001 // Dispose created
         var mainSource = DataSource ?? NpgsqlDataSource.Create(ConnectionString!);
+#pragma warning restore IDISP001 // Dispose created
         var logger = runtime.LoggerFactory.CreateLogger<PostgresqlMessageStore>();
 
         if (UseMasterTableTenancy)

@@ -108,6 +108,7 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
     {
         _restarter?.Dispose();
         _receiver?.Dispose();
+        Listener?.SafeDisposeSynchronously();
         _circuitBreaker?.SafeDisposeSynchronously();
         _backPressureAgent?.SafeDispose();
         _semaphore.Dispose();
