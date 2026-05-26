@@ -32,7 +32,9 @@ internal class ScopedWolverineSubscriptionRunner<T> : SubscriptionBase where T :
         var context = new MessageContext(_runtime);
         await context.EnlistInOutboxAsync(new PolecatEnvelopeTransaction((IDocumentSession)operations, context));
 
+#pragma warning disable IDISP001 // Dispose created
         var scope = _services.CreateScope();
+#pragma warning restore IDISP001 // Dispose created
         var subscription = scope.ServiceProvider.GetRequiredService<T>();
         await subscription.ProcessEventsAsync(page, controller, operations, context, cancellationToken);
 

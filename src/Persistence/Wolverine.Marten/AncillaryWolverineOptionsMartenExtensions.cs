@@ -160,7 +160,9 @@ public static class AncillaryWolverineOptionsMartenExtensions
             DataSource = masterDataSource
         };
 
+#pragma warning disable IDISP001 // Dispose created
         var dataSource = findMasterDataSource(store, mainSettings);
+#pragma warning restore IDISP001 // Dispose created
         var master = new PostgresqlMessageStore(mainSettings, runtime.Options.Durability, dataSource,
             runtime.LoggerFactory.CreateLogger<PostgresqlMessageStore>())
         {
