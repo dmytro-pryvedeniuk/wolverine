@@ -206,7 +206,9 @@ public static class WolverineOptionsMartenExtensions
             DataSource = masterDataSource ?? NpgsqlDataSource.Create(masterDatabaseConnectionString!)
         };
 
+#pragma warning disable IDISP001 // Dispose created
         var dataSource = findMasterDataSource(store, runtime, masterSettings, serviceProvider);
+#pragma warning restore IDISP001 // Dispose created
         var main = new PostgresqlMessageStore(masterSettings, runtime.Options.Durability, dataSource,
             runtime.LoggerFactory.CreateLogger<PostgresqlMessageStore>())
         {

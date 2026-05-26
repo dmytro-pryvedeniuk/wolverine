@@ -145,6 +145,7 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
         CircuitBreaker?.SafeDisposeSynchronously();
         _receiver?.SafeDispose();
         _storeAndEnqueue.SafeDispose();
+        _restarter?.SafeDispose();
     }
 
     ValueTask IReceiver.ReceivedAsync(IListener listener, Envelope[] messages)
