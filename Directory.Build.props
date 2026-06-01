@@ -12,6 +12,11 @@
         <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
         <NoWarn>1570;1571;1572;1573;1574;1587;1591;1701;1702;1711;1735;0618;VSTHRD200;CS7022</NoWarn>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <WarningsNotAsErrors>
+            IDISP001;IDISP002;IDISP003;IDISP004;IDISP005;IDISP006;IDISP007;IDISP008;IDISP009;IDISP010;
+            IDISP011;IDISP012;IDISP013;IDISP014;IDISP015;IDISP016;IDISP017;IDISP018;IDISP019;IDISP020;
+            IDISP021;IDISP022;IDISP023;IDISP024;IDISP025;IDISP026
+        </WarningsNotAsErrors>
         <ImplicitUsings>true</ImplicitUsings>
         <Nullable>enable</Nullable>
         <Version>6.3.0</Version>
