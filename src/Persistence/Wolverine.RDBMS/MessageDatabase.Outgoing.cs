@@ -24,19 +24,21 @@ public abstract partial class MessageDatabase<T>
 
     public async Task<IReadOnlyList<Envelope>> LoadOutgoingAsync(Uri destination)
     {
-        return await _dataSource.CreateCommand(_outgoingEnvelopeSql)
-            .With("destination", destination.ToString())
-            .FetchListAsync(r => DatabasePersistence.ReadOutgoingAsync(r, _cancellation), _cancellation);
+        await using var cmd = _dataSource.CreateCommand(_outgoingEnvelopeSql)
+            .With("destination", destination.ToString());
+        return await cmd.FetchListAsync(r => 
+            DatabasePersistence.ReadOutgoingAsync(r, _cancellation), 
+            _cancellation);
     }
 
-    public Task DeleteOutgoingAsync(Envelope envelope)
+    public async Task DeleteOutgoingAsync(Envelope envelope)
     {
-        if (HasDisposed) return Task.CompletedTask;
+        if (HasDisposed) return;
 
-        return CreateCommand(
-                $"delete from {QuotedSchemaName}.{DatabaseConstants.OutgoingTable} where id = @id")
-            .With("id", envelope.Id)
-            .ExecuteNonQueryAsync(_cancellation);
+        await using var cmd = CreateCommand(
+            $"delete from {QuotedSchemaName}.{DatabaseConstants.OutgoingTable} where id = @id")
+            .With("id", envelope.Id);
+        await cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
     public async Task StoreOutgoingAsync(Envelope envelope, int ownerId)

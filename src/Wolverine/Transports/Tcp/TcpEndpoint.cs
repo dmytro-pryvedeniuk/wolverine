@@ -52,16 +52,20 @@ public class TcpEndpoint : Endpoint
 
         if (hostNameType != UriHostNameType.IPv4 && hostNameType != UriHostNameType.IPv6)
         {
+#pragma warning disable IDISP001 // Dispose created
             var listener = HostName == "localhost"
                 ? new SocketListener(this, receiver, logger, IPAddress.Loopback, Port, cancellation)
                 : new SocketListener(this, receiver, logger, IPAddress.Any, Port, cancellation);
+#pragma warning restore IDISP001 // Dispose created
 
             return ValueTask.FromResult<IListener>(listener);
         }
 
         var ipaddr = IPAddress.Parse(HostName);
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         return ValueTask.FromResult<IListener>(new SocketListener(this, receiver, logger, ipaddr, Port,
             cancellation));
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 
     protected override ISender CreateSender(IWolverineRuntime runtime)

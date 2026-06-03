@@ -122,11 +122,11 @@ public abstract partial class MessageDatabase<T>
         await conn.OpenAsync(_cancellation);
         try
         {
-            await conn.CreateCommand(
-                    $"insert into {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} ({StorageConstants.TenantIdColumn}, {StorageConstants.ConnectionStringColumn}, {DatabaseConstants.DisabledColumn}) values (@id, @connection, false) on conflict ({StorageConstants.TenantIdColumn}) do update set {StorageConstants.ConnectionStringColumn} = @connection, {DatabaseConstants.DisabledColumn} = false")
+            await using var cmd = conn.CreateCommand(
+                $"insert into {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} ({StorageConstants.TenantIdColumn}, {StorageConstants.ConnectionStringColumn}, {DatabaseConstants.DisabledColumn}) values (@id, @connection, false) on conflict ({StorageConstants.TenantIdColumn}) do update set {StorageConstants.ConnectionStringColumn} = @connection, {DatabaseConstants.DisabledColumn} = false")
                 .With("id", tenantId)
-                .With("connection", connectionString)
-                .ExecuteNonQueryAsync(_cancellation);
+                .With("connection", connectionString);
+            await cmd.ExecuteNonQueryAsync(_cancellation);
         }
         finally
         {
@@ -140,11 +140,11 @@ public abstract partial class MessageDatabase<T>
         await conn.OpenAsync(_cancellation);
         try
         {
-            await conn.CreateCommand(
-                    $"update {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} set {DatabaseConstants.DisabledColumn} = @disabled where {StorageConstants.TenantIdColumn} = @id")
+            await using var cmd = conn.CreateCommand(
+                $"update {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} set {DatabaseConstants.DisabledColumn} = @disabled where {StorageConstants.TenantIdColumn} = @id")
                 .With("id", tenantId)
-                .With("disabled", disabled)
-                .ExecuteNonQueryAsync(_cancellation);
+                .With("disabled", disabled);
+            await cmd.ExecuteNonQueryAsync(_cancellation);
         }
         finally
         {
@@ -158,10 +158,10 @@ public abstract partial class MessageDatabase<T>
         await conn.OpenAsync(_cancellation);
         try
         {
-            await conn.CreateCommand(
-                    $"delete from {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} where {StorageConstants.TenantIdColumn} = @id")
-                .With("id", tenantId)
-                .ExecuteNonQueryAsync(_cancellation);
+            await using var cmd = conn.CreateCommand(
+                $"delete from {Settings.SchemaName}.{DatabaseConstants.TenantsTableName} where {StorageConstants.TenantIdColumn} = @id")
+                .With("id", tenantId);
+            await cmd.ExecuteNonQueryAsync(_cancellation);
         }
         finally
         {

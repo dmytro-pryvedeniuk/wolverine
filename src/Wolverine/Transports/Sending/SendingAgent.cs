@@ -60,7 +60,7 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
         {
             d.SafeDispose();
         }
-
+        _circuitWatcher?.Dispose();
         _sending.Dispose();
         _failureCountLock.Dispose();
     }
@@ -410,7 +410,7 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
             try
             {
                 Unlatch();
-                _circuitWatcher?.SafeDispose();
+                _circuitWatcher?.Dispose();
                 _circuitWatcher = null;
             }
             finally

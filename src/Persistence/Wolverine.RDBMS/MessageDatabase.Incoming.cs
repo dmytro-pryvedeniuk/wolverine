@@ -80,15 +80,15 @@ public abstract partial class MessageDatabase<T>
         }
     }
 
-    public Task MarkIncomingEnvelopeAsHandledAsync(Envelope envelope)
+    public async Task MarkIncomingEnvelopeAsHandledAsync(Envelope envelope)
     {
-        if (HasDisposed) return Task.CompletedTask;
+        if (HasDisposed) return;
         var keepUntil = DateTimeOffset.UtcNow.Add(Durability.KeepAfterMessageHandling);
-        return CreateCommand(_markEnvelopeAsHandledById)
+        await using var cmd = CreateCommand(_markEnvelopeAsHandledById)
             .With("id", envelope.Id)
             .With("keepUntil", keepUntil)
-            .With("uri", envelope.Destination!.ToString())
-            .ExecuteNonQueryAsync(_cancellation);
+            .With("uri", envelope.Destination!.ToString());
+        await cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
     public async Task MarkIncomingEnvelopeAsHandledAsync(IReadOnlyList<Envelope> envelopes)
@@ -129,14 +129,14 @@ public abstract partial class MessageDatabase<T>
         }
     }
 
-    public Task IncrementIncomingEnvelopeAttemptsAsync(Envelope envelope)
+    public async Task IncrementIncomingEnvelopeAttemptsAsync(Envelope envelope)
     {
-        if (HasDisposed) return Task.CompletedTask;
-        return CreateCommand(_incrementIncomingEnvelopeAttempts)
+        if (HasDisposed) return;
+        await using var cmd = CreateCommand(_incrementIncomingEnvelopeAttempts)
             .With("attempts", envelope.Attempts)
             .With("id", envelope.Id)
-            .With("uri", envelope.Destination!.ToString())
-            .ExecuteNonQueryAsync(_cancellation);
+            .With("uri", envelope.Destination!.ToString());
+        await cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
     public async Task StoreIncomingAsync(Envelope envelope)

@@ -106,7 +106,9 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
 
     public void Dispose()
     {
+        _restarter?.Dispose();
         _receiver?.Dispose();
+        Listener?.SafeDisposeSynchronously();
         _circuitBreaker?.SafeDisposeSynchronously();
         _backPressureAgent?.SafeDispose();
         _semaphore.Dispose();
@@ -309,6 +311,7 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
             var localQueue = _runtime.Endpoints.AgentForLocalQueue(Endpoint.GlobalPartitionLocalQueueUri) as ILocalQueue;
             if (localQueue != null)
             {
+                _receiver?.Dispose();
                 _receiver = new GlobalPartitionedReceiverBridge(localQueue);
             }
         }
@@ -317,7 +320,9 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
                  && !Endpoint.UsedInShardedTopology
                  && Endpoint.Uri.Scheme != "local")
         {
+#pragma warning disable IDISP003 // Dispose previous before re-assigning
             _receiver = new GlobalPartitionedInterceptor(_receiver, _runtime);
+#pragma warning restore IDISP003 // Dispose previous before re-assigning
         }
 
         if (Endpoint.ListenerCount > 1)
@@ -329,10 +334,14 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
                 listeners.Add(listener);
             }
 
+            if (Listener != null)
+                await Listener.DisposeAsync();
             Listener = new ParallelListener(Uri, listeners);
         }
         else
         {
+            if (Listener != null)
+                await Listener.DisposeAsync();
             Listener = await Endpoint.BuildListenerAsync(_runtime, _receiver);
         }
 
@@ -362,6 +371,7 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
 
         _logger.LogInformation("Pausing message listening at {Uri}", Uri);
         _runtime.Tracker.Publish(new ListenerState(Uri, Endpoint.EndpointName, ListeningStatus.Stopped));
+        _restarter?.Dispose();
         _restarter = new Restarter(this, pauseTime);
     }
 
@@ -385,7 +395,7 @@ public class ListeningAgent : IAsyncDisposable, IDisposable, IListeningAgent
             _logger.LogWarning("Paused listener at {Uri} — inbox database unavailable", Uri);
             _runtime.Tracker.Publish(new ListenerState(Uri, Endpoint.EndpointName, ListeningStatus.Stopped));
 
-            _restarter?.SafeDispose();
+            _restarter?.Dispose();
             _restarter = new InboxHealthRestarter(this, _runtime, _logger);
         }
         finally

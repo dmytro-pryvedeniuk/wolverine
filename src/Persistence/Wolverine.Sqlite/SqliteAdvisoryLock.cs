@@ -127,15 +127,16 @@ internal class SqliteAdvisoryLock : IAdvisoryLock
             // row would block all peers forever. Reap rows whose acquired_at is
             // older than TTL before attempting INSERT OR IGNORE. Live holders
             // refresh acquired_at on every re-attempt, so they're never reaped.
-            await _conn.CreateCommand(
-                    "DELETE FROM wolverine_locks WHERE lock_id = @lockId AND acquired_at < @cutoff")
+            await using var deleteCmd = _conn.CreateCommand(
+                "DELETE FROM wolverine_locks WHERE lock_id = @lockId AND acquired_at < @cutoff")
                 .With("lockId", lockId)
-                .With("cutoff", DateTime.UtcNow.Subtract(_lockTtl).ToString("yyyy-MM-dd HH:mm:ss"))
-                .ExecuteNonQueryAsync(token);
+                .With("cutoff", DateTime.UtcNow.Subtract(_lockTtl).ToString("yyyy-MM-dd HH:mm:ss"));
+            await deleteCmd.ExecuteNonQueryAsync(token);
 
-            var result = await _conn.CreateCommand("INSERT OR IGNORE INTO wolverine_locks (lock_id, acquired_at) VALUES (@lockId, datetime('now'))")
-                .With("lockId", lockId)
-                .ExecuteNonQueryAsync(token);
+            await using var insertCmd = _conn.CreateCommand(
+                "INSERT OR IGNORE INTO wolverine_locks (lock_id, acquired_at) VALUES (@lockId, datetime('now'))")
+                .With("lockId", lockId);
+            var result = await insertCmd.ExecuteNonQueryAsync(token);
 
             if (result > 0)
             {
@@ -158,10 +159,10 @@ internal class SqliteAdvisoryLock : IAdvisoryLock
 
         try
         {
-            await _conn.CreateCommand(
-                    "UPDATE wolverine_locks SET acquired_at = datetime('now') WHERE lock_id = @lockId")
-                .With("lockId", lockId)
-                .ExecuteNonQueryAsync(token);
+            await using var cmd = _conn.CreateCommand(
+                "UPDATE wolverine_locks SET acquired_at = datetime('now') WHERE lock_id = @lockId")
+                .With("lockId", lockId);
+            await cmd.ExecuteNonQueryAsync(token);
         }
         catch (Exception ex)
         {
@@ -186,12 +187,13 @@ internal class SqliteAdvisoryLock : IAdvisoryLock
 
         try
         {
-            await _conn.CreateCommand("DELETE FROM wolverine_locks WHERE lock_id = @lockId")
-                .With("lockId", lockId)
-                .ExecuteNonQueryAsync();
+            await using var cmd = _conn.CreateCommand(
+                "DELETE FROM wolverine_locks WHERE lock_id = @lockId")
+                .With("lockId", lockId);
+            await cmd.ExecuteNonQueryAsync();
             _locks.Remove(lockId);
 
-            if (!_locks.Any())
+            if (_locks.Count == 0)
             {
                 await _conn.CloseAsync().ConfigureAwait(false);
                 await _conn.DisposeAsync().ConfigureAwait(false);

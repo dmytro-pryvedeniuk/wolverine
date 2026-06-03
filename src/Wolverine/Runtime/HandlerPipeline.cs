@@ -54,12 +54,10 @@ public class HandlerPipeline : IHandlerPipeline
     public IMessageTracker Logger { get; }
     public bool TelemetryEnabled { get; set; } = true;
 
-    public Task InvokeAsync(Envelope envelope, IChannelCallback channel)
+    public async Task InvokeAsync(Envelope envelope, IChannelCallback channel)
     {
         if (_cancellation.IsCancellationRequested)
-        {
-            return Task.CompletedTask;
-        }
+            return;
 
         using var activity = TelemetryEnabled ? WolverineTracing.StartExecuting(envelope) : null;
 
@@ -67,7 +65,7 @@ public class HandlerPipeline : IHandlerPipeline
         // stamping is baked into the generated handler chain via
         // ApplyExecutionDiagnosticTagsFrame when the flag is set at codegen time.
         // See GH-2694.
-        return InvokeAsync(envelope, channel, activity);
+        await InvokeAsync(envelope, channel, activity);
     }
 
     public async Task InvokeAsync(Envelope envelope, IChannelCallback channel, Activity? activity)

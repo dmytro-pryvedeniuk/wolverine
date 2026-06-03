@@ -70,6 +70,7 @@ internal class DatabaseControlListener : IListener
     {
         await _cancellation.CancelAsync();
         _receivingLoop.SafeDispose();
+        _retryBlock.SafeDispose();
     }
 
     public Uri Address { get; }
@@ -86,15 +87,14 @@ internal class DatabaseControlListener : IListener
         }
     }
 
-    private Task deleteEnvelopeAsync(Envelope envelope, CancellationToken cancellationToken)
+    private async Task deleteEnvelopeAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         if (_transport.Database.HasDisposed)
-        {
-            return Task.CompletedTask;
-        }
+            return;
 
-        return _transport.Database.DataSource.CreateCommand($"delete from {_transport.TableName} where id = @id")
-            .With("id", envelope.Id)
-            .ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = _transport.Database.DataSource.CreateCommand(
+            $"delete from {_transport.TableName} where id = @id")
+            .With("id", envelope.Id);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

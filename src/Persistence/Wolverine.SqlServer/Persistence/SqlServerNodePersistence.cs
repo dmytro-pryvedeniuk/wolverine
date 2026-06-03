@@ -75,10 +75,11 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync();
 
-        await CommandExtensions.CreateCommand(conn, $"delete from {_nodeTable} where id = @id;update {_settings.SchemaName}.{IncomingTable} set {OwnerId} = 0 where {OwnerId} = @number;update {_settings.SchemaName}.{OutgoingTable} set {OwnerId} = 0 where {OwnerId} = @number;")
+        await using var cmd = CommandExtensions.CreateCommand(conn, 
+            $"delete from {_nodeTable} where id = @id;update {_settings.SchemaName}.{IncomingTable} set {OwnerId} = 0 where {OwnerId} = @number;update {_settings.SchemaName}.{OutgoingTable} set {OwnerId} = 0 where {OwnerId} = @number;")
             .With("id", nodeId)
-            .With("number", assignedNodeNumber)
-            .ExecuteNonQueryAsync();
+            .With("number", assignedNodeNumber);
+        await cmd.ExecuteNonQueryAsync();
 
         await conn.CloseAsync();
     }
@@ -204,10 +205,11 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync();
 
-        await conn.CreateCommand($"update {_nodeTable} set health_check = @now where id = @id")
+        await using var cmd = conn.CreateCommand(
+            $"update {_nodeTable} set health_check = @now where id = @id")
             .With("id", nodeId)
-            .With("now", lastHeartbeatTime)
-            .ExecuteNonQueryAsync();
+            .With("now", lastHeartbeatTime);
+        await cmd.ExecuteNonQueryAsync();
 
         await conn.CloseAsync();
     }
@@ -246,8 +248,10 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync(cancellationToken);
 
-        var count = await conn.CreateCommand($"update {_nodeTable} set health_check = GETUTCDATE() where id = @id")
-            .With("id", node.NodeId).ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand(
+            $"update {_nodeTable} set health_check = GETUTCDATE() where id = @id")
+            .With("id", node.NodeId);
+        var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         if (count == 0)
         {
@@ -314,10 +318,10 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync(cancellationToken);
 
-        await conn.CreateCommand($"delete from {_assignmentTable} where id = @id and node_id = @node")
+        await using var cmd = conn.CreateCommand($"delete from {_assignmentTable} where id = @id and node_id = @node")
             .With("id", agentUri.ToString())
-            .With("node", nodeId)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         await conn.CloseAsync();
     }
@@ -327,10 +331,10 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync(cancellationToken);
 
-        await conn.CreateCommand($"delete from {_assignmentTable} where id = @id;insert into {_assignmentTable} (id, node_id) values (@id, @node);")
+        await using var cmd = conn.CreateCommand($"delete from {_assignmentTable} where id = @id;insert into {_assignmentTable} (id, node_id) values (@id, @node);")
             .With("id", agentUri.ToString())
-            .With("node", nodeId)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         await conn.CloseAsync();
     }
@@ -365,8 +369,8 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync();
 
-        var result = await conn.CreateCommand($"select top {count} node_number, event_name, timestamp, description from {_settings.SchemaName}.{DatabaseConstants.NodeRecordTableName} order by id desc")
-            .FetchListAsync(readRecord);
+        await using var cmd = conn.CreateCommand($"select top {count} node_number, event_name, timestamp, description from {_settings.SchemaName}.{DatabaseConstants.NodeRecordTableName} order by id desc");
+        var result = await cmd.FetchListAsync(readRecord);
 
         await conn.CloseAsync();
 
@@ -380,9 +384,9 @@ internal class SqlServerNodePersistence : DatabaseConstants, INodeAgentPersisten
         await using var conn = new SqlConnection(_settings.ConnectionString);
         await conn.OpenAsync();
 
-        await conn.CreateCommand(
-                $"delete from {_settings.SchemaName}.{DatabaseConstants.NodeRecordTableName} where id not in (select top {retainCount} id from {_settings.SchemaName}.{DatabaseConstants.NodeRecordTableName} order by id desc)")
-            .ExecuteNonQueryAsync();
+        await using var cmd = conn.CreateCommand(
+            $"delete from {_settings.SchemaName}.{DatabaseConstants.NodeRecordTableName} where id not in (select top {retainCount} id from {_settings.SchemaName}.{DatabaseConstants.NodeRecordTableName} order by id desc)");
+        await cmd.ExecuteNonQueryAsync();
 
         await conn.CloseAsync();
     }

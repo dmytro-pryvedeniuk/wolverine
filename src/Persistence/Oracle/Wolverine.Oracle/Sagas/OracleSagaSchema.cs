@@ -116,7 +116,7 @@ public class OracleSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : Sa
 
         await using var cmd = ((OracleConnection)transaction.Connection!).CreateCommand(_insertSql, (OracleTransaction)transaction);
         addIdParameter(cmd, "id", id);
-        cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Clob) { Value = JsonSerializer.Serialize(saga) });
+        cmd.With("body", JsonSerializer.Serialize(saga), OracleDbType.Clob);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         saga.Version = 1;
@@ -129,7 +129,7 @@ public class OracleSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : Sa
         var id = IdSource(saga);
 
         await using var cmd = ((OracleConnection)transaction.Connection!).CreateCommand(_updateSql, (OracleTransaction)transaction);
-        cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Clob) { Value = JsonSerializer.Serialize(saga) });
+        cmd.With("body", JsonSerializer.Serialize(saga), OracleDbType.Clob);
         addIdParameter(cmd, "id", id);
         cmd.With("version", saga.Version);
         var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -177,7 +177,7 @@ public class OracleSagaSchema<T, TId> : IDatabaseSagaSchema<TId, T> where T : Sa
     {
         if (id is Guid guidValue)
         {
-            cmd.Parameters.Add(new OracleParameter(name, OracleDbType.Raw) { Value = guidValue.ToByteArray() });
+            cmd.With(name, guidValue.ToByteArray(), OracleDbType.Raw);
         }
         else
         {

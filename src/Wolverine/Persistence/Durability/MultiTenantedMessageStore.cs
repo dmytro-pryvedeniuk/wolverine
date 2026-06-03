@@ -344,7 +344,7 @@ public partial class MultiTenantedMessageStore : IMessageStore, IMessageInbox, I
             {
             }
         }
-
+        _retryBlock.Dispose();
         HasDisposed = true;
     }
 

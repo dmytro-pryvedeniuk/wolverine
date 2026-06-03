@@ -77,10 +77,7 @@ internal class OracleControlSender : ISender, IAsyncDisposable
                 cmd.With("id", envelope.Id);
                 cmd.With("messagetype", envelope.MessageType!);
                 cmd.With("node", _endpoint.NodeId);
-                cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob)
-                {
-                    Value = EnvelopeSerializer.Serialize(envelope)
-                });
+                cmd.With("body", EnvelopeSerializer.Serialize(envelope), OracleDbType.Blob);
                 cmd.With("expires", DateTimeOffset.UtcNow.AddSeconds(30));
 
                 await cmd.ExecuteNonQueryAsync(cancellationToken);

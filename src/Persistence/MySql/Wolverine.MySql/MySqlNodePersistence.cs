@@ -38,10 +38,10 @@ internal class MySqlNodePersistence : DatabaseConstants, INodeAgentPersistence
         _lockId = schemaName.GetDeterministicHashCode();
     }
 
-    public Task ClearAllAsync(CancellationToken cancellationToken)
+    public async Task ClearAllAsync(CancellationToken cancellationToken)
     {
-        return _dataSource.CreateCommand($"DELETE FROM {_nodeTable}")
-            .ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = _dataSource.CreateCommand($"DELETE FROM {_nodeTable}");
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<int> PersistAsync(WolverineNode node, CancellationToken cancellationToken)
@@ -74,18 +74,16 @@ internal class MySqlNodePersistence : DatabaseConstants, INodeAgentPersistence
         return Convert.ToInt32(result);
     }
 
-    public Task DeleteAsync(Guid nodeId, int assignedNodeNumber)
+    public async Task DeleteAsync(Guid nodeId, int assignedNodeNumber)
     {
         if (_database.HasDisposed)
-        {
-            return Task.CompletedTask;
-        }
+            return;
 
-        return _dataSource.CreateCommand(
-                $"DELETE FROM {_nodeTable} WHERE id = @id; UPDATE {_settings.SchemaName}.{IncomingTable} SET {OwnerId} = 0 WHERE {OwnerId} = @number; UPDATE {_settings.SchemaName}.{OutgoingTable} SET {OwnerId} = 0 WHERE {OwnerId} = @number")
+        await using var cmd = _dataSource.CreateCommand(
+             $"DELETE FROM {_nodeTable} WHERE id = @id; UPDATE {_settings.SchemaName}.{IncomingTable} SET {OwnerId} = 0 WHERE {OwnerId} = @number; UPDATE {_settings.SchemaName}.{OutgoingTable} SET {OwnerId} = 0 WHERE {OwnerId} = @number")
             .With("id", nodeId)
-            .With("number", assignedNodeNumber)
-            .ExecuteNonQueryAsync();
+            .With("number", assignedNodeNumber);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task<IReadOnlyList<WolverineNode>> LoadAllNodesAsync(CancellationToken cancellationToken)
@@ -285,34 +283,37 @@ internal class MySqlNodePersistence : DatabaseConstants, INodeAgentPersistence
 
     public async Task RemoveAssignmentAsync(Guid nodeId, Uri agentUri, CancellationToken cancellationToken)
     {
-        await _dataSource.CreateCommand($"DELETE FROM {_assignmentTable} WHERE id = @id AND node_id = @node")
+        await using var cmd = _dataSource.CreateCommand(
+            $"DELETE FROM {_assignmentTable} WHERE id = @id AND node_id = @node")
             .With("id", agentUri.ToString())
-            .With("node", nodeId)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task AddAssignmentAsync(Guid nodeId, Uri agentUri, CancellationToken cancellationToken)
     {
-        await _dataSource.CreateCommand(
-                $"INSERT INTO {_assignmentTable} (id, node_id) VALUES (@id, @node) ON DUPLICATE KEY UPDATE node_id = @node")
+        await using var cmd = _dataSource.CreateCommand(
+            $"INSERT INTO {_assignmentTable} (id, node_id) VALUES (@id, @node) ON DUPLICATE KEY UPDATE node_id = @node")
             .With("id", agentUri.ToString())
-            .With("node", nodeId)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task OverwriteHealthCheckTimeAsync(Guid nodeId, DateTimeOffset lastHeartbeatTime)
     {
-        await _dataSource.CreateCommand($"UPDATE {_nodeTable} SET health_check = @now WHERE id = @id")
+        await using var cmd = _dataSource.CreateCommand(
+            $"UPDATE {_nodeTable} SET health_check = @now WHERE id = @id")
             .With("id", nodeId)
-            .With("now", lastHeartbeatTime)
-            .ExecuteNonQueryAsync();
+            .With("now", lastHeartbeatTime);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task MarkHealthCheckAsync(WolverineNode node, CancellationToken token)
     {
-        var count = await _dataSource
-            .CreateCommand($"UPDATE {_nodeTable} SET health_check = UTC_TIMESTAMP(6) WHERE id = @id")
-            .With("id", node.NodeId).ExecuteNonQueryAsync(token);
+        await using var cmd = _dataSource.CreateCommand(
+            $"UPDATE {_nodeTable} SET health_check = UTC_TIMESTAMP(6) WHERE id = @id")
+            .With("id", node.NodeId);
+        var count = await cmd.ExecuteNonQueryAsync(token);
 
         if (count == 0)
         {
@@ -349,11 +350,10 @@ internal class MySqlNodePersistence : DatabaseConstants, INodeAgentPersistence
             };
         };
 
-        return await _dataSource
-            .CreateCommand(
-                $"SELECT node_number, event_name, timestamp, description FROM {_settings.SchemaName}.{NodeRecordTableName} ORDER BY id DESC LIMIT @limit")
-            .With("limit", count)
-            .FetchListAsync(readRecord);
+        await using var cmd = _dataSource.CreateCommand(
+            $"SELECT node_number, event_name, timestamp, description FROM {_settings.SchemaName}.{NodeRecordTableName} ORDER BY id DESC LIMIT @limit")
+            .With("limit", count);
+        return await cmd.FetchListAsync(readRecord);
     }
 
     public bool HasLeadershipLock()

@@ -206,6 +206,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         var mapper = Queue.BuildMapper(_runtime);
 
+        _consumer?.Dispose();
         _consumer = new WorkerQueueMessageConsumer(Channel!, _receiver, Logger, this, mapper, Address, _cancellation);
 
         await Channel!.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);

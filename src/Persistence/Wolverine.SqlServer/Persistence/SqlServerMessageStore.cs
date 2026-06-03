@@ -216,11 +216,13 @@ public class SqlServerMessageStore : MessageDatabase<SqlConnection>
             await reader.CloseAsync();
         }
 
-        counts.Outgoing = (int)(await CreateCommand($"select count(*) from {SchemaName}.{DatabaseConstants.OutgoingTable}")
-            .ExecuteScalarAsync())!;
+        await using var outgoingCmd = CreateCommand($"select count(*) from {SchemaName}.{DatabaseConstants.OutgoingTable}");
+        var outgoingCount = await outgoingCmd.ExecuteScalarAsync();
+        counts.Outgoing = Convert.ToInt32(outgoingCount);
 
-        counts.DeadLetter = (int)(await CreateCommand($"select count(*) from {SchemaName}.{DatabaseConstants.DeadLetterTable}")
-            .ExecuteScalarAsync())!;
+        await using var deadLetterCmd = CreateCommand($"select count(*) from {SchemaName}.{DatabaseConstants.DeadLetterTable}");
+        var deadLetterCount = await deadLetterCmd.ExecuteScalarAsync();
+        counts.DeadLetter = Convert.ToInt32(deadLetterCount);
 
         return counts;
     }
@@ -246,25 +248,30 @@ public class SqlServerMessageStore : MessageDatabase<SqlConnection>
         return cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
-    public override Task DeleteOutgoingAsync(Envelope[] envelopes)
+    public override async Task DeleteOutgoingAsync(Envelope[] envelopes)
     {
-        if (HasDisposed) return Task.CompletedTask;
+        if (HasDisposed) 
+            return;
 
-        return CallFunction("uspDeleteOutgoingEnvelopes")
-            .WithIdList(this, envelopes).ExecuteNonQueryAsync(_cancellation);
+        await using var cmd = CallFunction("uspDeleteOutgoingEnvelopes")
+            .WithIdList(this, envelopes);
+        await cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
-    public override Task<IReadOnlyList<Envelope>> LoadPageOfGloballyOwnedIncomingAsync(Uri listenerAddress, int limit)
+    public override async Task<IReadOnlyList<Envelope>> LoadPageOfGloballyOwnedIncomingAsync(Uri listenerAddress, int limit)
     {
-        return CreateCommand(_findAtLargeEnvelopesSql)
+        await using var cmd = CreateCommand(_findAtLargeEnvelopesSql)
             .With("address", listenerAddress.ToString())
-            .With("limit", limit)
+            .With("limit", limit);
+        return await cmd
             .FetchListAsync(r => DatabasePersistence.ReadIncomingAsync(r));
     }
 
     public override DbCommandBuilder ToCommandBuilder()
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         return new DbCommandBuilder(new SqlCommand());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 
     public override async Task<bool> ExistsAsync(Envelope envelope, CancellationToken cancellation)
@@ -275,10 +282,10 @@ public class SqlServerMessageStore : MessageDatabase<SqlConnection>
         {
             await using var conn = CreateConnection();
             await conn.OpenAsync(cancellation);
-            var count = await conn
-                .CreateCommand($"select count(id) from {SchemaName}.{DatabaseConstants.IncomingTable} where id = @id")
-                .With("id", envelope.Id)
-                .ExecuteScalarAsync(cancellation);
+            await using var cmd = conn.CreateCommand(
+                $"select count(id) from {SchemaName}.{DatabaseConstants.IncomingTable} where id = @id")
+                .With("id", envelope.Id);
+            var count = await cmd.ExecuteScalarAsync(cancellation);
 
             return ((int)count) > 0;
         }
@@ -286,11 +293,11 @@ public class SqlServerMessageStore : MessageDatabase<SqlConnection>
         {
             await using var conn = CreateConnection();
             await conn.OpenAsync(cancellation);
-            var count = await conn
-                .CreateCommand($"select count(id) from {SchemaName}.{DatabaseConstants.IncomingTable} where id = @id and {DatabaseConstants.ReceivedAt} = @destination")
+            await using var cmd = conn.CreateCommand(
+                $"select count(id) from {SchemaName}.{DatabaseConstants.IncomingTable} where id = @id and {DatabaseConstants.ReceivedAt} = @destination")
                 .With("id", envelope.Id)
-                .With("destination", envelope.Destination!.ToString())
-                .ExecuteScalarAsync(cancellation);
+                .With("destination", envelope.Destination!.ToString());
+            var count = await cmd.ExecuteScalarAsync(cancellation);
 
             return ((int)count) > 0;
         }
@@ -321,20 +328,20 @@ public class SqlServerMessageStore : MessageDatabase<SqlConnection>
 
         if (table.MessageTypeColumnName.IsEmpty())
         {
-            await conn.CreateCommand(
-                    $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) values (@id, @json)")
+            await using var cmd = conn.CreateCommand(
+                $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) values (@id, @json)")
                 .With("id", Guid.NewGuid())
-                .With("json", json)
-                .ExecuteNonQueryAsync(token);
+                .With("json", json);
+            await cmd.ExecuteNonQueryAsync(token);
         }
         else
         {
-            await conn.CreateCommand(
-                    $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) values (@id, @json, @message)")
+            await using var cmd = conn.CreateCommand(
+                $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) values (@id, @json, @message)")
                 .With("id", Guid.NewGuid())
                 .With("json", json)
-                .With("message", messageTypeName)
-                .ExecuteNonQueryAsync(token);
+                .With("message", messageTypeName);
+            await cmd.ExecuteNonQueryAsync(token);
         }
         
         await conn.CloseAsync();

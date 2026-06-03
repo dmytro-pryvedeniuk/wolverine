@@ -42,10 +42,10 @@ internal class PostgresqlNodePersistence : DatabaseConstants, INodeAgentPersiste
         _lockId = schemaName.GetDeterministicHashCode();
     }
 
-    public Task ClearAllAsync(CancellationToken cancellationToken)
+    public async Task ClearAllAsync(CancellationToken cancellationToken)
     {
-        return _dataSource.CreateCommand($"delete from {_nodeTable}")
-            .ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = _dataSource.CreateCommand($"delete from {_nodeTable}");
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<int> PersistAsync(WolverineNode node, CancellationToken cancellationToken)
@@ -65,19 +65,17 @@ internal class PostgresqlNodePersistence : DatabaseConstants, INodeAgentPersiste
         return (int)raw!;
     }
 
-    public Task DeleteAsync(Guid nodeId, int assignedNodeNumber)
+    public async Task DeleteAsync(Guid nodeId, int assignedNodeNumber)
     {
         if (_database.HasDisposed)
-        {
-            return Task.CompletedTask;
-        }
+            return;
 
         var quotedSchema = _settings.SchemaName.QuoteIdentifier();
-        return _dataSource.CreateCommand(
-                $"delete from {_nodeTable} where id = :id;update {quotedSchema}.{IncomingTable} set {OwnerId} = 0 where {OwnerId} = :number;update {quotedSchema}.{OutgoingTable} set {OwnerId} = 0 where {OwnerId} = :number;")
+        await using var cmd = _dataSource.CreateCommand(
+            $"delete from {_nodeTable} where id = :id;update {quotedSchema}.{IncomingTable} set {OwnerId} = 0 where {OwnerId} = :number;update {quotedSchema}.{OutgoingTable} set {OwnerId} = 0 where {OwnerId} = :number;")
             .With("id", nodeId)
-            .With("number", assignedNodeNumber)
-            .ExecuteNonQueryAsync();
+            .With("number", assignedNodeNumber);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task<IReadOnlyList<WolverineNode>> LoadAllNodesAsync(CancellationToken cancellationToken)
@@ -240,33 +238,37 @@ internal class PostgresqlNodePersistence : DatabaseConstants, INodeAgentPersiste
 
     public async Task RemoveAssignmentAsync(Guid nodeId, Uri agentUri, CancellationToken cancellationToken)
     {
-        await _dataSource.CreateCommand($"delete from {_assignmentTable} where id = :id and node_id = :node")
+        await using var cmd = _dataSource.CreateCommand(
+            $"delete from {_assignmentTable} where id = :id and node_id = :node")
             .With("id", agentUri.ToString())
-            .With("node", nodeId)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task AddAssignmentAsync(Guid nodeId, Uri agentUri, CancellationToken cancellationToken)
     {
-        await _dataSource.CreateCommand(
-                $"insert into {_assignmentTable} (id, node_id) values (:id, :node) on conflict (id) do update set node_id = :node;")
+        await using var cmd = _dataSource.CreateCommand(
+            $"insert into {_assignmentTable} (id, node_id) values (:id, :node) on conflict (id) do update set node_id = :node;")
             .With("id", agentUri.ToString())
-            .With("node", nodeId)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task OverwriteHealthCheckTimeAsync(Guid nodeId, DateTimeOffset lastHeartbeatTime)
     {
-        await _dataSource.CreateCommand($"update {_nodeTable} set health_check = :now where id = :id")
+        await using var cmd = _dataSource.CreateCommand(
+            $"update {_nodeTable} set health_check = :now where id = :id")
             .With("id", nodeId)
-            .With("now", lastHeartbeatTime)
-            .ExecuteNonQueryAsync();
+            .With("now", lastHeartbeatTime);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task MarkHealthCheckAsync(WolverineNode node, CancellationToken token)
     {
-        var count = await _dataSource.CreateCommand($"update {_nodeTable} set health_check = now() where id = :id")
-            .With("id", node.NodeId).ExecuteNonQueryAsync(token);
+        await using var cmd = _dataSource.CreateCommand(
+            $"update {_nodeTable} set health_check = now() where id = :id")
+            .With("id", node.NodeId);
+        var count = await cmd.ExecuteNonQueryAsync(token);
 
         if (count == 0)
         {
@@ -304,22 +306,22 @@ internal class PostgresqlNodePersistence : DatabaseConstants, INodeAgentPersiste
         };
 
         var quotedSchema = _settings.SchemaName.QuoteIdentifier();
-        return await _dataSource
-            .CreateCommand(
-                $"select node_number, event_name, timestamp, description from {quotedSchema}.{NodeRecordTableName} order by id desc LIMIT :limit")
-            .With("limit", count)
-            .FetchListAsync(readRecord);
+        await using var cmd = _dataSource.CreateCommand(
+            $"select node_number, event_name, timestamp, description from {quotedSchema}.{NodeRecordTableName} order by id desc LIMIT :limit")
+            .With("limit", count);
+        return await cmd.FetchListAsync(readRecord);
     }
 
-    public Task DeleteOldNodeRecordsAsync(int retainCount)
+    public async Task DeleteOldNodeRecordsAsync(int retainCount)
     {
-        if (retainCount <= 0) return Task.CompletedTask;
+        if (retainCount <= 0)
+            return;
 
         var quotedSchema = _settings.SchemaName.QuoteIdentifier();
-        return _dataSource.CreateCommand(
+        await using var cmd = _dataSource.CreateCommand(
                 $"delete from {quotedSchema}.{NodeRecordTableName} where id not in (select id from {quotedSchema}.{NodeRecordTableName} order by id desc limit :retain)")
-            .With("retain", retainCount)
-            .ExecuteNonQueryAsync();
+            .With("retain", retainCount);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public bool HasLeadershipLock()
@@ -359,21 +361,6 @@ internal class PostgresqlNodePersistence : DatabaseConstants, INodeAgentPersiste
         node.Capabilities.AddRange(capabilities.Select(x => new Uri(x)));
 
         return node;
-    }
-
-    private async Task<Guid?> currentLeaderAsync(NpgsqlConnection conn)
-    {
-        var current = await _dataSource
-            .CreateCommand(
-                $"select node_id from {_assignmentTable} where id = '{NodeAgentController.LeaderUri}'")
-            .ExecuteScalarAsync();
-
-        if (current is Guid nodeId)
-        {
-            return nodeId;
-        }
-
-        return null;
     }
 }
 

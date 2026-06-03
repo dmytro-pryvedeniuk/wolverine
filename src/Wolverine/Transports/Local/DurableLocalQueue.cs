@@ -110,8 +110,6 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
             }
         }
 
-        _receiver = null;
-
         CircuitBreaker?.Reset();
 
         _runtime.Tracker.Publish(
@@ -119,18 +117,20 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
 
         _logger.LogInformation("Pausing message listening at {Uri}", Endpoint.Uri);
 
+        _restarter?.Dispose();
         _restarter = new Restarter(this, pauseTime);
     }
 
-    public ValueTask StartAsync()
+    public async ValueTask StartAsync()
     {
+        if (_receiver != null)
+            await _receiver.DisposeAsync().ConfigureAwait(false);
         _receiver = new DurableReceiver(Endpoint, _runtime, Pipeline);
         Latched = false;
         _runtime.Tracker.Publish(new ListenerState(_receiver.Uri, Endpoint.EndpointName,
             ListeningStatus.Accepting));
         _restarter?.Dispose();
         _restarter = null;
-        return ValueTask.CompletedTask;
     }
 
     ListeningStatus IListenerCircuit.Status => Latched ? ListeningStatus.TooBusy : ListeningStatus.Accepting;
@@ -145,6 +145,7 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
         CircuitBreaker?.SafeDisposeSynchronously();
         _receiver?.SafeDispose();
         _storeAndEnqueue.SafeDispose();
+        _restarter?.SafeDispose();
     }
 
     ValueTask IReceiver.ReceivedAsync(IListener listener, Envelope[] messages)

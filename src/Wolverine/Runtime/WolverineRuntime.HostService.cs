@@ -401,6 +401,7 @@ public partial class WolverineRuntime
 
     private void startInMemoryScheduledJobs()
     {
+        ScheduledJobs?.Dispose();
         ScheduledJobs =
             new InMemoryScheduledJobProcessor((ILocalQueue)Endpoints.AgentForLocalQueue(TransportConstants.Replies), Logger);
 

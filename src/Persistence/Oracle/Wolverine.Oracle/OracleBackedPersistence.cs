@@ -160,7 +160,9 @@ internal class OracleBackedPersistence : IOracleBackedPersistence, IWolverineExt
 
         var sagaTables = runtime.Services.GetServices<SagaTableDefinition>().ToArray();
 
+#pragma warning disable IDISP001 // Dispose created
         var dataSource = new OracleDataSource(ConnectionString!);
+#pragma warning restore IDISP001 // Dispose created
         var logger = runtime.LoggerFactory.CreateLogger<OracleMessageStore>();
 
         if (UseMasterTableTenancy)

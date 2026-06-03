@@ -26,6 +26,7 @@ internal class BackPressureAgent : IDisposable
 
     public void Start()
     {
+        _timer?.Dispose();
         _timer = new Timer
         {
             AutoReset = true, Enabled = true, Interval = 2000

@@ -13,24 +13,24 @@ using Wolverine.Transports.Sending;
 namespace Wolverine.Runtime.WorkerQueues;
 
 public class DurableReceiver : ILocalQueue, IChannelCallback, ISupportNativeScheduling, ISupportDeadLetterQueue,
-    IAsyncDisposable
+    IDisposable, IAsyncDisposable
 {
-    private readonly RetryBlock<Envelope> _completeBlock;
+    private RetryBlock<Envelope> _completeBlock;
 
-    private readonly ISender? _deadLetterSender;
-    private readonly RetryBlock<Envelope> _deferBlock;
+    private ISender? _deadLetterSender;
+    private RetryBlock<Envelope> _deferBlock;
     private readonly Endpoint _endpoint;
     private readonly IMessageInbox _inbox;
-    private readonly RetryBlock<Envelope> _incrementAttempts;
+    private RetryBlock<Envelope> _incrementAttempts;
 
     // ReSharper disable once InconsistentNaming
     protected readonly ILogger _logger;
-    private readonly RetryBlock<Envelope> _markAsHandled;
-    private readonly RetryBlock<Envelope> _moveToErrors;
-    private readonly IBlock<Envelope> _receiver;
-    private readonly RetryBlock<Envelope> _receivingOne;
+    private RetryBlock<Envelope> _markAsHandled;
+    private RetryBlock<Envelope> _moveToErrors;
+    private IBlock<Envelope> _receiver;
+    private RetryBlock<Envelope> _receivingOne;
     private readonly IWolverineRuntime _runtime;
-    private readonly RetryBlock<Envelope> _scheduleExecution;
+    private RetryBlock<Envelope> _scheduleExecution;
     private readonly DurabilitySettings _settings;
 
     // These members are for draining
@@ -44,7 +44,7 @@ public class DurableReceiver : ILocalQueue, IChannelCallback, ISupportNativeSche
         _settings = runtime.DurabilitySettings;
         
         // the check for Stores being null is honestly just because of some tests that use a little too much mocking
-        _inbox = runtime .Stores != null && runtime.Stores.HasAnyAncillaryStores() ? new DelegatingMessageInbox(runtime.Storage.Inbox, runtime.Stores) : runtime.Storage.Inbox;
+        _inbox = runtime.Stores != null && runtime.Stores.HasAnyAncillaryStores() ? new DelegatingMessageInbox(runtime.Storage.Inbox, runtime.Stores) : runtime.Storage.Inbox;
         _logger = runtime.LoggerFactory.CreateLogger<DurableReceiver>();
 
         Uri = endpoint.Uri;
@@ -172,25 +172,116 @@ public class DurableReceiver : ILocalQueue, IChannelCallback, ISupportNativeSche
         }
     }
 
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
     public async ValueTask DisposeAsync()
     {
-        await _receiver.WaitForCompletionAsync().ConfigureAwait(false);
+        await DisposeAsyncCore().ConfigureAwait(false);
+        Dispose(disposing: false);
+        GC.SuppressFinalize(this);
+    }
 
-        _incrementAttempts.Dispose();
-        _scheduleExecution.Dispose();
-        _markAsHandled.Dispose();
-        _moveToErrors.Dispose();
-        _receivingOne.Dispose();
-
-        if (_deadLetterSender is IDisposable d)
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
         {
-            d.SafeDispose();
+            _receiver?.Complete();
+
+            _incrementAttempts?.Dispose();
+            _incrementAttempts = null!;
+
+            _scheduleExecution?.Dispose();
+            _scheduleExecution = null!;
+            
+            _markAsHandled?.Dispose();
+            _markAsHandled = null!;
+            
+            _moveToErrors?.Dispose();
+            _moveToErrors = null!;
+            
+            _receivingOne?.Dispose();
+            _receivingOne = null!;
+
+            _completeBlock?.Dispose();
+            _completeBlock = null!;
+
+            _deferBlock?.Dispose();
+            _deferBlock = null!;
+
+            if (_receiver is IDisposable r)
+            {
+                r.Dispose();
+                _receiver = null!;
+            }
+
+            if (_deadLetterSender is IDisposable d)
+            {
+                d.Dispose();
+                _deadLetterSender = null;
+            }
+        }
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        if (_receiver is not null)
+        {
+            await _receiver.WaitForCompletionAsync().ConfigureAwait(false);
+            await _receiver.DisposeAsync().ConfigureAwait(false);
+            _receiver = null!;
         }
 
-        _moveToErrors.Dispose();
+        if (_incrementAttempts is IAsyncDisposable ad0)
+            await ad0.DisposeAsync().ConfigureAwait(false);
+        else
+            _incrementAttempts?.Dispose();
+        _incrementAttempts = null!;
 
-        _completeBlock.Dispose();
-        _deferBlock.Dispose();
+        if (_scheduleExecution is IAsyncDisposable ad1)
+            await ad1.DisposeAsync().ConfigureAwait(false);
+        else
+            _scheduleExecution?.Dispose();
+        _scheduleExecution = null!;
+
+        if (_markAsHandled is IAsyncDisposable ad2)
+            await ad2.DisposeAsync().ConfigureAwait(false);
+        else
+            _markAsHandled?.Dispose();
+        _markAsHandled = null!;
+
+        if (_moveToErrors is IAsyncDisposable ad3)
+            await ad3.DisposeAsync().ConfigureAwait(false);
+        else
+            _moveToErrors?.Dispose();
+        _moveToErrors = null!;
+
+        if (_receivingOne is IAsyncDisposable ad4)
+            await ad4.DisposeAsync().ConfigureAwait(false);
+        else
+            _receivingOne?.Dispose();
+        _receivingOne = null!;
+
+        if (_completeBlock is IAsyncDisposable ad5)
+            await ad5.DisposeAsync().ConfigureAwait(false);
+        else
+            _completeBlock?.Dispose();
+        _completeBlock = null!;
+
+        if (_deferBlock is IAsyncDisposable ad6)
+            await ad6.DisposeAsync().ConfigureAwait(false);
+        else
+            _deferBlock?.Dispose();
+        _deferBlock = null!;
+
+        if (_deadLetterSender is IAsyncDisposable ad)
+            await ad.DisposeAsync().ConfigureAwait(false);
+        else if (_deadLetterSender is IDisposable d)
+            d.Dispose();
+        _deadLetterSender = null;
     }
 
     public async ValueTask CompleteAsync(Envelope envelope)
@@ -356,15 +447,6 @@ public class DurableReceiver : ILocalQueue, IChannelCallback, ISupportNativeSche
         await _deferBlock.DrainAsync().ConfigureAwait(false);
 
         await executeWithRetriesAsync(() => _inbox.ReleaseIncomingAsync(_settings.AssignedNodeNumber, Uri)).ConfigureAwait(false);
-    }
-
-    public void Dispose()
-    {
-        // Might need to drain the block
-        _receiver.Complete();
-
-        _completeBlock.Dispose();
-        _deferBlock.Dispose();
     }
 
     public Task MoveToErrorsAsync(Envelope envelope, Exception exception)

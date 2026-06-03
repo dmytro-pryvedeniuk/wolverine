@@ -85,6 +85,7 @@ internal class OracleControlListener : IListener
     {
         await _cancellation.CancelAsync();
         _receivingLoop.SafeDispose();
+        _retryBlock.SafeDispose();
     }
 
     public async ValueTask StopAsync()

@@ -90,10 +90,10 @@ public class DatabaseSagaSchema<TId, TSaga> : IDatabaseSagaSchema<TId, TSaga> wh
         if (id == null || id.Equals(default(TId))) throw new ArgumentOutOfRangeException(nameof(saga), "You must define the saga id when using the lightweight saga storage");
         
         await ensureStorageExistsAsync(cancellationToken);
-        await transaction.CreateCommand(_insertSql)
+        await using var cmd = transaction.CreateCommand(_insertSql)
             .With("id", id!)
-            .With("body", JsonSerializer.SerializeToUtf8Bytes(saga))
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("body", JsonSerializer.SerializeToUtf8Bytes(saga));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         saga.Version = 1;
     }
@@ -103,11 +103,11 @@ public class DatabaseSagaSchema<TId, TSaga> : IDatabaseSagaSchema<TId, TSaga> wh
         await ensureStorageExistsAsync(cancellationToken);
 
         var id = IdSource(saga);
-        var count = await transaction.CreateCommand(_updateSql)
+        await using var cmd = transaction.CreateCommand(_updateSql)
             .With("id", id!)
             .With("body", JsonSerializer.SerializeToUtf8Bytes(saga))
-            .With("version", saga.Version)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("version", saga.Version);
+        var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         if (count == 0)
             throw new SagaConcurrencyException(
@@ -119,10 +119,10 @@ public class DatabaseSagaSchema<TId, TSaga> : IDatabaseSagaSchema<TId, TSaga> wh
     public async Task DeleteAsync(TSaga saga, DbTransaction transaction, CancellationToken cancellationToken)
     {
         await ensureStorageExistsAsync(cancellationToken);
-        await transaction
+        await using var cmd = transaction
             .CreateCommand(_deleteSql)
-            .With("id", IdSource(saga)!)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("id", IdSource(saga)!);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<TSaga?> LoadAsync(TId id, DbTransaction tx, CancellationToken cancellationToken)

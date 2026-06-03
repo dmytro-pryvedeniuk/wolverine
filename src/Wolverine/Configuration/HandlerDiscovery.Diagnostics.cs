@@ -24,7 +24,7 @@ public sealed partial class HandlerDiscovery
             return "MISS -- Handler types can only be concrete types";
         }
 
-        var writer = new StringWriter();
+        using var writer = new StringWriter();
         if (!Assemblies.Contains(candidateType.Assembly))
         {
             writeAssemblyIsNotRegistered(options, candidateType, writer);

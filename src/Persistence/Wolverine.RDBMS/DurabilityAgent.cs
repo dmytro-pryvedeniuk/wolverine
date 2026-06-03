@@ -242,6 +242,7 @@ internal class DurabilityAgent : IAgent
 
     public void StartScheduledJobPolling()
     {
+        _scheduledJobTimer?.Dispose();
         _scheduledJobTimer =
             new Timer(
                 _ => { _runningBlock.Post(new RunScheduledMessagesOperation(_database, _settings)); },

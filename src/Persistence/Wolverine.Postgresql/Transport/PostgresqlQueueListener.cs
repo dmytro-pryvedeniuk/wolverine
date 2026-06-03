@@ -279,9 +279,10 @@ SELECT message.{DatabaseConstants.Body} from message;
 
         try
         {
-            return await conn.CreateCommand(_tryPopMessagesDirectlySql)
-                .With("count", count)
-                .FetchListAsync<Envelope>(async reader =>
+            await using var cmd = conn.CreateCommand(_tryPopMessagesDirectlySql)
+                .With("count", count);
+            return await cmd
+                .FetchListAsync(async reader =>
                 {
                     var data = await reader.GetFieldValueAsync<byte[]>(0, cancellationToken);
                     try

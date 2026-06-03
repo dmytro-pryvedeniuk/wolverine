@@ -92,13 +92,14 @@ ON DUPLICATE KEY UPDATE {DatabaseConstants.Body} = @body, {DatabaseConstants.Mes
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken);
         try
         {
-            await conn.CreateCommand($"DELETE FROM {_queue.Parent.MessageStorageSchemaName}.{DatabaseConstants.IncomingTable} WHERE id = @id;" + _writeDirectlyToTheScheduledTable)
+            await using var cmd = conn.CreateCommand(
+                $"DELETE FROM {_queue.Parent.MessageStorageSchemaName}.{DatabaseConstants.IncomingTable} WHERE id = @id;" + _writeDirectlyToTheScheduledTable)
                 .With("id", envelope.Id)
                 .With("body", EnvelopeSerializer.Serialize(envelope))
                 .With("type", envelope.MessageType)
                 .With("expires", envelope.DeliverBy)
-                .With("time", envelope.ScheduledTime)
-                .ExecuteNonQueryAsync(cancellationToken);
+                .With("time", envelope.ScheduledTime);
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
         finally
         {
@@ -131,9 +132,9 @@ ON DUPLICATE KEY UPDATE {DatabaseConstants.Body} = @body, {DatabaseConstants.Mes
 
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToQueueSql)
-                .With("id", envelope.Id)
-                .ExecuteNonQueryAsync(cancellationToken);
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToQueueSql)
+                .With("id", envelope.Id);
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException("No matching outgoing envelope");
         }
@@ -158,10 +159,10 @@ ON DUPLICATE KEY UPDATE {DatabaseConstants.Body} = @body, {DatabaseConstants.Mes
 
         try
         {
-            var count = await conn.CreateCommand(_moveFromOutgoingToScheduledSql)
+            await using var cmd = conn.CreateCommand(_moveFromOutgoingToScheduledSql)
                 .With("id", envelope.Id)
-                .With("time", envelope.ScheduledTime!.Value)
-                .ExecuteNonQueryAsync(cancellationToken);
+                .With("time", envelope.ScheduledTime!.Value);
+            var count = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
             if (count == 0) throw new InvalidOperationException($"No matching outgoing envelope for {envelope}");
         }
@@ -169,10 +170,10 @@ ON DUPLICATE KEY UPDATE {DatabaseConstants.Body} = @body, {DatabaseConstants.Mes
         {
             if (e.Message.ContainsIgnoreCase("Duplicate entry"))
             {
-                await conn.CreateCommand(
-                        $"DELETE FROM {_queue.Parent.MessageStorageSchemaName}.{DatabaseConstants.OutgoingTable} WHERE id = @id")
-                    .With("id", envelope.Id)
-                    .ExecuteNonQueryAsync(cancellationToken);
+                await using var cmd = conn.CreateCommand(
+                     $"DELETE FROM {_queue.Parent.MessageStorageSchemaName}.{DatabaseConstants.OutgoingTable} WHERE id = @id")
+                    .With("id", envelope.Id);
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
 
                 return;
             }
@@ -197,12 +198,12 @@ ON DUPLICATE KEY UPDATE {DatabaseConstants.Body} = @body, {DatabaseConstants.Mes
             {
                 try
                 {
-                    await conn.CreateCommand(_writeDirectlyToQueueTableSql)
+                    await using var cmd = conn.CreateCommand(_writeDirectlyToQueueTableSql)
                         .With("id", envelope.Id)
                         .With("body", EnvelopeSerializer.Serialize(envelope))
                         .With("type", envelope.MessageType)
-                        .With("expires", envelope.DeliverBy)
-                        .ExecuteNonQueryAsync(cancellationToken);
+                        .With("expires", envelope.DeliverBy);
+                    await cmd.ExecuteNonQueryAsync(cancellationToken);
                 }
                 catch (MySqlException e)
                 {
@@ -220,12 +221,12 @@ ON DUPLICATE KEY UPDATE {DatabaseConstants.Body} = @body, {DatabaseConstants.Mes
 
     private async Task scheduleMessageAsync(Envelope envelope, CancellationToken cancellationToken, MySqlConnection conn)
     {
-        await conn.CreateCommand(_writeDirectlyToTheScheduledTable)
+        await using var cmd = conn.CreateCommand(_writeDirectlyToTheScheduledTable)
             .With("id", envelope.Id)
             .With("body", EnvelopeSerializer.Serialize(envelope))
             .With("type", envelope.MessageType)
             .With("expires", envelope.DeliverBy)
-            .With("time", envelope.ScheduledTime)
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("time", envelope.ScheduledTime);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

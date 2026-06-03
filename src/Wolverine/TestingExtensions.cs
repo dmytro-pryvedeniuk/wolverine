@@ -305,7 +305,7 @@ public static class TestingExtensions
             var nodes = await _leaderRuntime.Storage.Nodes.LoadAllNodesAsync(CancellationToken.None);
 
             var builder = new StringBuilder();
-            var writer = new StringWriter(builder);
+            await using var writer = new StringWriter(builder);
 
             await writer.WriteLineAsync("According to the database...");
 

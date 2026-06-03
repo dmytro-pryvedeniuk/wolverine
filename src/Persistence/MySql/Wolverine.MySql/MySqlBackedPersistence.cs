@@ -200,7 +200,9 @@ internal class MySqlBackedPersistence : IMySqlBackedPersistence, IWolverineExten
 
         var sagaTables = runtime.Services.GetServices<SagaTableDefinition>().ToArray();
 
+#pragma warning disable IDISP001 // Dispose created
         var mainSource = DataSource ?? MySqlDataSourceFactory.Create(ConnectionString!);
+#pragma warning restore IDISP001 // Dispose created
         var logger = runtime.LoggerFactory.CreateLogger<MySqlMessageStore>();
 
         if (UseMasterTableTenancy)

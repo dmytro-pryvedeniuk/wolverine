@@ -166,8 +166,8 @@ internal class SqliteQueueListener : IListener
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        await conn.CreateCommand($"delete from {_queueTableName} where keep_until is not null and julianday(keep_until) < julianday('now')")
-            .ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand($"delete from {_queueTableName} where keep_until is not null and julianday(keep_until) < julianday('now')");
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task StartAsync()

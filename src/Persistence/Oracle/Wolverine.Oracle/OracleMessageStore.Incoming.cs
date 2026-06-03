@@ -23,15 +23,15 @@ internal partial class OracleMessageStore
             $"INSERT INTO {SchemaName}.{DatabaseConstants.IncomingTable} ({DatabaseConstants.IncomingFields}) " +
             "VALUES (:body, :id, :status, :ownerId, :executionTime, :attempts, :messageType, :receivedAt, :keepUntil)");
 
-        cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = data });
+        cmd.With("body", data, OracleDbType.Blob);
         cmd.With("id", envelope.Id);
         cmd.With("status", envelope.Status.ToString());
         cmd.With("ownerId", envelope.OwnerId);
-        cmd.Parameters.Add(new OracleParameter("executionTime", OracleDbType.TimeStampTZ) { Value = (object?)envelope.ScheduledTime ?? DBNull.Value });
+        cmd.With("executionTime", envelope.ScheduledTime!, OracleDbType.TimeStampTZ);
         cmd.With("attempts", envelope.Attempts);
         cmd.With("messageType", envelope.MessageType!);
         cmd.With("receivedAt", envelope.Destination?.ToString() ?? string.Empty);
-        cmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)envelope.KeepUntil ?? DBNull.Value });
+        cmd.With("keepUntil", envelope.KeepUntil!, OracleDbType.TimeStampTZ);
 
         try
         {
@@ -67,15 +67,15 @@ internal partial class OracleMessageStore
                 "VALUES (:body, :id, :status, :ownerId, :executionTime, :attempts, :messageType, :receivedAt, :keepUntil)");
             cmd.Transaction = tx;
 
-            cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = data });
+            cmd.With("body", data, OracleDbType.Blob);
             cmd.With("id", envelope.Id);
             cmd.With("status", envelope.Status.ToString());
             cmd.With("ownerId", envelope.OwnerId);
-            cmd.Parameters.Add(new OracleParameter("executionTime", OracleDbType.TimeStampTZ) { Value = (object?)envelope.ScheduledTime ?? DBNull.Value });
+            cmd.With("executionTime", envelope.ScheduledTime!, OracleDbType.TimeStampTZ);
             cmd.With("attempts", envelope.Attempts);
             cmd.With("messageType", envelope.MessageType!);
             cmd.With("receivedAt", envelope.Destination?.ToString() ?? string.Empty);
-            cmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)envelope.KeepUntil ?? DBNull.Value });
+            cmd.With("keepUntil", envelope.KeepUntil!, OracleDbType.TimeStampTZ);
 
             try
             {
@@ -101,18 +101,18 @@ internal partial class OracleMessageStore
         if (HasDisposed) return false;
 
         await using var conn = await _dataSource.OpenConnectionAsync(cancellation);
-        OracleCommand cmd;
+        await using var cmd = conn.CreateCommand();
 
         if (_durability.MessageIdentity == MessageIdentity.IdOnly)
         {
-            cmd = conn.CreateCommand(
-                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id");
+            cmd.CommandText = 
+                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id";
             cmd.With("id", envelope.Id);
         }
         else
         {
-            cmd = conn.CreateCommand(
-                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :destination");
+            cmd.CommandText =
+                $"SELECT COUNT(id) FROM {SchemaName}.{DatabaseConstants.IncomingTable} WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :destination";
             cmd.With("id", envelope.Id);
             cmd.With("destination", envelope.Destination!.ToString());
         }
@@ -142,7 +142,7 @@ internal partial class OracleMessageStore
                 $"{DatabaseConstants.Attempts} = :attempts, {DatabaseConstants.OwnerId} = {TransportConstants.AnyNode} " +
                 $"WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :uri");
             cmd.With("id", envelope.Id);
-            cmd.Parameters.Add(new OracleParameter("time", OracleDbType.TimeStampTZ) { Value = envelope.ScheduledTime!.Value });
+            cmd.With("time", envelope.ScheduledTime!, OracleDbType.TimeStampTZ);
             cmd.With("attempts", envelope.Attempts);
             cmd.With("uri", envelope.Destination?.ToString() ?? string.Empty);
             rowsAffected = await cmd.ExecuteNonQueryAsync(_cancellation);
@@ -164,7 +164,7 @@ internal partial class OracleMessageStore
             $"{DatabaseConstants.Attempts} = :attempts, {DatabaseConstants.OwnerId} = {TransportConstants.AnyNode} " +
             $"WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :uri");
         cmd.With("id", envelope.Id);
-        cmd.Parameters.Add(new OracleParameter("time", OracleDbType.TimeStampTZ) { Value = envelope.ScheduledTime!.Value });
+        cmd.With("time", envelope.ScheduledTime!.Value, OracleDbType.TimeStampTZ);
         cmd.With("attempts", envelope.Attempts);
         cmd.With("uri", envelope.Destination?.ToString() ?? string.Empty);
         await cmd.ExecuteNonQueryAsync(_cancellation);
@@ -210,20 +210,20 @@ internal partial class OracleMessageStore
         insertCmd.Transaction = tx;
 
         insertCmd.With("id", envelope.Id);
-        insertCmd.Parameters.Add(new OracleParameter("executionTime", OracleDbType.TimeStampTZ) { Value = (object?)envelope.ScheduledTime ?? DBNull.Value });
-        insertCmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = data });
+        insertCmd.With("executionTime", envelope.ScheduledTime! , OracleDbType.TimeStampTZ);
+        insertCmd.With("body", data, OracleDbType.Blob);
         insertCmd.With("messageType", envelope.MessageType ?? string.Empty);
         insertCmd.With("receivedAt", envelope.Destination?.ToString() ?? string.Empty);
         insertCmd.With("source", envelope.Source ?? string.Empty);
         insertCmd.With("exceptionType", exception?.GetType().FullNameInCode() ?? string.Empty);
         insertCmd.With("exceptionMessage", exception?.Message ?? string.Empty);
-        insertCmd.Parameters.Add(new OracleParameter("sentAt", OracleDbType.TimeStampTZ) { Value = envelope.SentAt.ToUniversalTime() });
+        insertCmd.With("sentAt", envelope.SentAt.ToUniversalTime(), OracleDbType.TimeStampTZ);
         insertCmd.With("replayable", 0); // Oracle stores bool as NUMBER(1)
 
         if (_durability.DeadLetterQueueExpirationEnabled)
         {
             var expiration = envelope.DeliverBy ?? DateTimeOffset.UtcNow.Add(_durability.DeadLetterQueueExpiration);
-            insertCmd.Parameters.Add(new OracleParameter("expires", OracleDbType.TimeStampTZ) { Value = expiration });
+            insertCmd.With("expires", expiration, OracleDbType.TimeStampTZ);
         }
 
         await insertCmd.ExecuteNonQueryAsync(_cancellation);
@@ -252,7 +252,7 @@ internal partial class OracleMessageStore
             $"UPDATE {SchemaName}.{DatabaseConstants.IncomingTable} SET " +
             $"{DatabaseConstants.Status} = '{EnvelopeStatus.Handled}', {DatabaseConstants.KeepUntil} = :keepUntil " +
             $"WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :uri");
-        cmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)envelope.KeepUntil ?? DBNull.Value });
+        cmd.With("keepUntil", envelope.KeepUntil! , OracleDbType.TimeStampTZ);
         cmd.With("id", envelope.Id);
         cmd.With("uri", envelope.Destination?.ToString() ?? string.Empty);
         await cmd.ExecuteNonQueryAsync(_cancellation);
@@ -273,7 +273,7 @@ internal partial class OracleMessageStore
                 $"{DatabaseConstants.Status} = '{EnvelopeStatus.Handled}', {DatabaseConstants.KeepUntil} = :keepUntil " +
                 $"WHERE id = :id AND {DatabaseConstants.ReceivedAt} = :uri");
             cmd.Transaction = tx;
-            cmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)envelope.KeepUntil ?? DBNull.Value });
+            cmd.With("keepUntil", envelope.KeepUntil! , OracleDbType.TimeStampTZ);
             cmd.With("id", envelope.Id);
             cmd.With("uri", envelope.Destination?.ToString() ?? string.Empty);
             await cmd.ExecuteNonQueryAsync(_cancellation);
@@ -349,15 +349,15 @@ internal partial class OracleMessageStore
                 "VALUES (:body, :id, :status, :ownerId, :executionTime, :attempts, :messageType, :receivedAt, :keepUntil)");
             cmd.Transaction = (OracleTransaction)tx;
 
-            cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = data });
+            cmd.With("body", data, OracleDbType.Blob);
             cmd.With("id", envelope.Id);
             cmd.With("status", envelope.Status.ToString());
             cmd.With("ownerId", envelope.OwnerId);
-            cmd.Parameters.Add(new OracleParameter("executionTime", OracleDbType.TimeStampTZ) { Value = (object?)envelope.ScheduledTime ?? DBNull.Value });
+            cmd.With("executionTime", envelope.ScheduledTime! , OracleDbType.TimeStampTZ);
             cmd.With("attempts", envelope.Attempts);
             cmd.With("messageType", envelope.MessageType!);
             cmd.With("receivedAt", envelope.Destination?.ToString() ?? string.Empty);
-            cmd.Parameters.Add(new OracleParameter("keepUntil", OracleDbType.TimeStampTZ) { Value = (object?)envelope.KeepUntil ?? DBNull.Value });
+            cmd.With("keepUntil", envelope.KeepUntil! , OracleDbType.TimeStampTZ);
 
             try
             {

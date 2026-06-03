@@ -304,7 +304,7 @@ internal partial class TrackedSession : ITrackedSession
 
     internal string BuildActivityMessage(string description)
     {
-        var writer = new StringWriter();
+        using var writer = new StringWriter();
         writer.WriteLine(description);
         writer.WriteLine("Activity detected:");
 
@@ -370,7 +370,7 @@ internal partial class TrackedSession : ITrackedSession
         var records = AllRecordsInOrder().Where(x => x.Message is FailureAcknowledgement).ToArray();
         if (records.Any())
         {
-            var writer = new StringWriter();
+            using var writer = new StringWriter();
             writer.WriteLine($"{nameof(FailureAcknowledgement)} messages were detected. ");
             writer.WriteLine($"Configure the tracked activity with {nameof(TrackedSessionConfiguration.IgnoreFailureAcks)}() to ignore these failure acks in the test.");
             foreach (EnvelopeRecord record in records)

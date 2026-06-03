@@ -40,8 +40,8 @@ internal class SqliteNodePersistence : DatabaseConstants, INodeAgentPersistence
     public async Task ClearAllAsync(CancellationToken cancellationToken)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await conn.CreateCommand($"delete from {_nodeTable}")
-            .ExecuteNonQueryAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand($"delete from {_nodeTable}");
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<int> PersistAsync(WolverineNode node, CancellationToken cancellationToken)
@@ -82,11 +82,11 @@ internal class SqliteNodePersistence : DatabaseConstants, INodeAgentPersistence
         }
 
         await using var conn = await _dataSource.OpenConnectionAsync(CancellationToken.None).ConfigureAwait(false);
-        await conn.CreateCommand(
-                $"delete from {_nodeTable} where id = @id;update {IncomingTable} set {OwnerId} = 0 where {OwnerId} = @number;update {OutgoingTable} set {OwnerId} = 0 where {OwnerId} = @number;")
+        await using var cmd = conn.CreateCommand(
+            $"delete from {_nodeTable} where id = @id;update {IncomingTable} set {OwnerId} = 0 where {OwnerId} = @number;update {OutgoingTable} set {OwnerId} = 0 where {OwnerId} = @number;")
             .With("id", nodeId.ToString())
-            .With("number", assignedNodeNumber)
-            .ExecuteNonQueryAsync();
+            .With("number", assignedNodeNumber);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task<IReadOnlyList<WolverineNode>> LoadAllNodesAsync(CancellationToken cancellationToken)
@@ -141,19 +141,20 @@ internal class SqliteNodePersistence : DatabaseConstants, INodeAgentPersistence
         {
             if (restriction.Type == AgentRestrictionType.None)
             {
-                await conn.CreateCommand($"delete from {_restrictionTable} where id = @id")
-                    .With("id", restriction.Id.ToString())
-                    .ExecuteNonQueryAsync(cancellationToken);
+                await using var cmd = conn.CreateCommand(
+                    $"delete from {_restrictionTable} where id = @id")
+                    .With("id", restriction.Id.ToString());
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
             else
             {
-                await conn.CreateCommand(
-                        $"insert or replace into {_restrictionTable} (id, uri, type, node) values (@id, @uri, @type, @node)")
+                await using var cmd = conn.CreateCommand(
+                    $"insert or replace into {_restrictionTable} (id, uri, type, node) values (@id, @uri, @type, @node)")
                     .With("id", restriction.Id.ToString())
                     .With("uri", restriction.AgentUri.ToString())
                     .With("type", restriction.Type.ToString())
-                    .With("node", restriction.NodeNumber)
-                    .ExecuteNonQueryAsync(cancellationToken);
+                    .With("node", restriction.NodeNumber);
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
         }
 
@@ -269,47 +270,49 @@ internal class SqliteNodePersistence : DatabaseConstants, INodeAgentPersistence
 
         foreach (var agent in agents)
         {
-            await conn.CreateCommand(
-                    $"insert or replace into {_assignmentTable} (id, node_id) values (@id, @node)")
+            await using var cmd = conn.CreateCommand(
+                $"insert or replace into {_assignmentTable} (id, node_id) values (@id, @node)")
                 .With("id", agent.ToString())
-                .With("node", nodeId.ToString())
-                .ExecuteNonQueryAsync(cancellationToken);
+                .With("node", nodeId.ToString());
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
     }
 
     public async Task RemoveAssignmentAsync(Guid nodeId, Uri agentUri, CancellationToken cancellationToken)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await conn.CreateCommand($"delete from {_assignmentTable} where id = @id and node_id = @node")
+        await using var cmd = conn.CreateCommand(
+            $"delete from {_assignmentTable} where id = @id and node_id = @node")
             .With("id", agentUri.ToString())
-            .With("node", nodeId.ToString())
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId.ToString());
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task AddAssignmentAsync(Guid nodeId, Uri agentUri, CancellationToken cancellationToken)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await conn.CreateCommand(
-                $"insert or replace into {_assignmentTable} (id, node_id) values (@id, @node)")
+        await using var cmd = conn.CreateCommand(
+            $"insert or replace into {_assignmentTable} (id, node_id) values (@id, @node)")
             .With("id", agentUri.ToString())
-            .With("node", nodeId.ToString())
-            .ExecuteNonQueryAsync(cancellationToken);
+            .With("node", nodeId.ToString());
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task OverwriteHealthCheckTimeAsync(Guid nodeId, DateTimeOffset lastHeartbeatTime)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(CancellationToken.None).ConfigureAwait(false);
-        await conn.CreateCommand($"update {_nodeTable} set health_check = @now where id = @id")
+        await using var cmd = conn.CreateCommand($"update {_nodeTable} set health_check = @now where id = @id")
             .With("id", nodeId.ToString())
-            .With("now", lastHeartbeatTime.ToString("O"))
-            .ExecuteNonQueryAsync();
+            .With("now", lastHeartbeatTime.ToString("O"));
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task MarkHealthCheckAsync(WolverineNode node, CancellationToken token)
     {
         await using var conn = await _dataSource.OpenConnectionAsync(token).ConfigureAwait(false);
-        var count = await conn.CreateCommand($"update {_nodeTable} set health_check = datetime('now') where id = @id")
-            .With("id", node.NodeId.ToString()).ExecuteNonQueryAsync(token);
+        await using var cmd = conn.CreateCommand($"update {_nodeTable} set health_check = datetime('now') where id = @id")
+            .With("id", node.NodeId.ToString());
+        var count = await cmd.ExecuteNonQueryAsync(token);
 
         if (count == 0)
         {

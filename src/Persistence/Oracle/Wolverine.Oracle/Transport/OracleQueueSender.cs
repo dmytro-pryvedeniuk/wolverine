@@ -123,9 +123,9 @@ internal class OracleQueueSender : IOracleQueueSender
                 await using var insertCmd = conn.CreateCommand(_writeDirectlyToQueueTableSql);
                 insertCmd.Transaction = tx;
                 insertCmd.With("id", id);
-                insertCmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = body });
+                insertCmd.With("body", body, OracleDbType.Blob);
                 insertCmd.With("type", messageType);
-                insertCmd.Parameters.Add(new OracleParameter("expires", OracleDbType.TimeStampTZ) { Value = (object?)keepUntil ?? DBNull.Value });
+                insertCmd.With("expires", keepUntil! , OracleDbType.TimeStampTZ);
                 await insertCmd.ExecuteNonQueryAsync(cancellationToken);
 
                 // Delete from outgoing
@@ -184,10 +184,10 @@ internal class OracleQueueSender : IOracleQueueSender
                 await using var insertCmd = conn.CreateCommand(_writeDirectlyToTheScheduledTable);
                 insertCmd.Transaction = tx;
                 insertCmd.With("id", id);
-                insertCmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = body });
+                insertCmd.With("body", body, OracleDbType.Blob);
                 insertCmd.With("type", messageType);
-                insertCmd.Parameters.Add(new OracleParameter("expires", OracleDbType.TimeStampTZ) { Value = (object?)keepUntil ?? DBNull.Value });
-                insertCmd.Parameters.Add(new OracleParameter("time", OracleDbType.TimeStampTZ) { Value = envelope.ScheduledTime!.Value });
+                insertCmd.With("expires", keepUntil! , OracleDbType.TimeStampTZ);
+                insertCmd.With("time", envelope.ScheduledTime!.Value, OracleDbType.TimeStampTZ);
                 await insertCmd.ExecuteNonQueryAsync(cancellationToken);
 
                 // Delete from outgoing
@@ -241,9 +241,9 @@ internal class OracleQueueSender : IOracleQueueSender
                 {
                     await using var cmd = conn.CreateCommand(_writeDirectlyToQueueTableSql);
                     cmd.With("id", envelope.Id);
-                    cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = EnvelopeSerializer.Serialize(envelope) });
+                    cmd.With("body", EnvelopeSerializer.Serialize(envelope), OracleDbType.Blob);
                     cmd.With("type", envelope.MessageType!);
-                    cmd.Parameters.Add(new OracleParameter("expires", OracleDbType.TimeStampTZ) { Value = (object?)envelope.DeliverBy ?? DBNull.Value });
+                    cmd.With("expires", envelope.DeliverBy! , OracleDbType.TimeStampTZ);
                     await cmd.ExecuteNonQueryAsync(cancellationToken);
                 }
                 catch (OracleException e) when (e.Number == 1)
@@ -263,10 +263,10 @@ internal class OracleQueueSender : IOracleQueueSender
     {
         await using var cmd = conn.CreateCommand(_writeDirectlyToTheScheduledTable);
         cmd.With("id", envelope.Id);
-        cmd.Parameters.Add(new OracleParameter("body", OracleDbType.Blob) { Value = EnvelopeSerializer.Serialize(envelope) });
+        cmd.With("body", EnvelopeSerializer.Serialize(envelope), OracleDbType.Blob);
         cmd.With("type", envelope.MessageType!);
-        cmd.Parameters.Add(new OracleParameter("expires", OracleDbType.TimeStampTZ) { Value = (object?)envelope.DeliverBy ?? DBNull.Value });
-        cmd.Parameters.Add(new OracleParameter("time", OracleDbType.TimeStampTZ) { Value = (object?)envelope.ScheduledTime ?? DBNull.Value });
+        cmd.With("expires", envelope.DeliverBy! , OracleDbType.TimeStampTZ);
+        cmd.With("time", envelope.ScheduledTime! , OracleDbType.TimeStampTZ);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

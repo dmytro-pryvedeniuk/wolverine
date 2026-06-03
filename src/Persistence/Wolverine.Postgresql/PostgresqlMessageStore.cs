@@ -177,12 +177,14 @@ internal class PostgresqlMessageStore : MessageDatabase<NpgsqlConnection>
         await conn.CloseAsync();
     }
 
-    protected override Task deleteMany(DbTransaction tx, Guid[] ids, DbObjectName tableName,
+    protected override async Task deleteMany(DbTransaction tx, Guid[] ids, DbObjectName tableName,
         string idColumnName)
     {
-        return tx.CreateCommand($"delete from {tableName.QualifiedName} where {idColumnName} = ANY(@ids)")
-            .As<NpgsqlCommand>().With("ids", ids).ExecuteNonQueryAsync();
+        await using var cmd = tx.CreateCommand(
+            $"delete from {tableName.QualifiedName} where {idColumnName} = ANY(@ids)")
+            .With("ids", ids);
 
+        await cmd.ExecuteNonQueryAsync();
     }
 
     protected override async Task<bool> TryAttainLockAsync(int lockId, NpgsqlConnection connection, CancellationToken token)
@@ -252,8 +254,8 @@ where c.relname = '{tableName}';";
             // by VACUUM/ANALYZE, fall back to exact count
             if (reltuples <= 0 && relationSize > 0)
             {
-                var exactCount = await CreateCommand($"select count(*) from {QuotedSchemaName}.{tableName}")
-                    .ExecuteScalarAsync();
+                await using var cmd = CreateCommand($"select count(*) from {QuotedSchemaName}.{tableName}");
+                var exactCount = await cmd.ExecuteScalarAsync();
                 return Convert.ToInt32(exactCount);
             }
 
@@ -365,15 +367,16 @@ join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = '{Schem
         // After deleting data, PostgreSQL's pg_class.reltuples statistics become stale.
         // FetchCountsAsync() uses these stats for fast estimation, so we must run ANALYZE
         // to update them after bulk deletes.
-        await conn.CreateCommand($"ANALYZE {QuotedSchemaName}.{DatabaseConstants.DeadLetterTable}")
-            .ExecuteNonQueryAsync(_cancellation);
-        await conn.CreateCommand($"ANALYZE {QuotedSchemaName}.{DatabaseConstants.OutgoingTable}")
-            .ExecuteNonQueryAsync(_cancellation);
+        await using var cmd1 = conn.CreateCommand($"ANALYZE {QuotedSchemaName}.{DatabaseConstants.DeadLetterTable}");
+        await cmd1.ExecuteNonQueryAsync(_cancellation);
+
+        await using var cmd2 = conn.CreateCommand($"ANALYZE {QuotedSchemaName}.{DatabaseConstants.OutgoingTable}");
+        await cmd2.ExecuteNonQueryAsync(_cancellation);
 
         if (Durability.EnableInboxPartitioning)
         {
-            await conn.CreateCommand($"ANALYZE {QuotedSchemaName}.{DatabaseConstants.IncomingTable}")
-                .ExecuteNonQueryAsync(_cancellation);
+            await using var cmd3 = conn.CreateCommand($"ANALYZE {QuotedSchemaName}.{DatabaseConstants.IncomingTable}");
+            await cmd3.ExecuteNonQueryAsync(_cancellation);
         }
     }
 
@@ -391,9 +394,9 @@ join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = '{Schem
     {
         if (HasDisposed) return;
 
-        await CreateCommand(_deleteOutgoingEnvelopesSql)
-            .WithEnvelopeIds("ids", envelopes)
-            .ExecuteNonQueryAsync(_cancellation);
+        await using var cmd = CreateCommand(_deleteOutgoingEnvelopesSql)
+            .WithEnvelopeIds("ids", envelopes);
+        await cmd.ExecuteNonQueryAsync(_cancellation);
     }
 
     protected override string determineOutgoingEnvelopeSql(DurabilitySettings settings)
@@ -405,15 +408,17 @@ join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = '{Schem
     public override async Task<IReadOnlyList<Envelope>> LoadPageOfGloballyOwnedIncomingAsync(Uri listenerAddress,
         int limit)
     {
-        return await CreateCommand(_findAtLargeEnvelopesSql)
+        await using var cmd = CreateCommand(_findAtLargeEnvelopesSql)
             .With("address", listenerAddress.ToString())
-            .With("limit", limit)
-            .FetchListAsync(r => DatabasePersistence.ReadIncomingAsync(r));
+            .With("limit", limit);
+        return await cmd.FetchListAsync(r => DatabasePersistence.ReadIncomingAsync(r));
     }
 
     public override DbCommandBuilder ToCommandBuilder()
     {
+#pragma warning disable IDISP004 // Don't ignore created IDisposable
         return new DbCommandBuilder(new NpgsqlCommand());
+#pragma warning restore IDISP004 // Don't ignore created IDisposable
     }
 
     public override async Task<bool> ExistsAsync(Envelope envelope, CancellationToken cancellation)
@@ -423,21 +428,21 @@ join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = '{Schem
         if (Durability.MessageIdentity == MessageIdentity.IdOnly)
         {
             await using var conn = await NpgsqlDataSource.OpenConnectionAsync(cancellation);
-            var count = await conn
-                .CreateCommand($"select count(id) from {QuotedSchemaName}.{DatabaseConstants.IncomingTable} where id = :id")
-                .With("id", envelope.Id)
-                .ExecuteScalarAsync(cancellation);
+            await using var cmd = conn.CreateCommand(
+                $"select count(id) from {QuotedSchemaName}.{DatabaseConstants.IncomingTable} where id = :id")
+                .With("id", envelope.Id);
+            var count = await cmd.ExecuteScalarAsync(cancellation);
 
             return ((long)count!) > 0;
         }
         else
         {
             await using var conn = await NpgsqlDataSource.OpenConnectionAsync(cancellation);
-            var count = await conn
-                .CreateCommand($"select count(id) from {QuotedSchemaName}.{DatabaseConstants.IncomingTable} where id = :id and {DatabaseConstants.ReceivedAt} = :destination")
+            await using var cmd = conn.CreateCommand(
+                $"select count(id) from {QuotedSchemaName}.{DatabaseConstants.IncomingTable} where id = :id and {DatabaseConstants.ReceivedAt} = :destination")
                 .With("id", envelope.Id)
-                .With("destination", envelope.Destination!.ToString())
-                .ExecuteScalarAsync(cancellation);
+                .With("destination", envelope.Destination!.ToString());
+            var count = await cmd.ExecuteScalarAsync(cancellation);
 
             return ((long)count!) > 0;
         }
@@ -480,11 +485,10 @@ join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = '{Schem
                     return;
                 }
 
-                await conn.CreateCommand(_reassignIncomingSql)
+                await using var cmd2 = conn.CreateCommand(_reassignIncomingSql)
                     .With("owner", durabilitySettings.AssignedNodeNumber)
-                    .With("ids", envelopes.Select(x => x.Id).ToArray())
-                    .ExecuteNonQueryAsync(_cancellation);
-
+                    .With("ids", envelopes.Select(x => x.Id).ToArray());
+                await cmd2.ExecuteNonQueryAsync(_cancellation);
 
                 await tx.CommitAsync(cancellationToken);
 
@@ -518,20 +522,20 @@ join pg_catalog.pg_namespace n on n.oid = c.relnamespace and n.nspname = '{Schem
 
         if (table.MessageTypeColumnName.IsEmpty())
         {
-            await conn.CreateCommand(
-                    $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) values (@id, @json)")
+            await using var cmd = conn.CreateCommand(
+                $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}) values (@id, @json)")
                 .With("id", Guid.NewGuid())
-                .With("json", json, NpgsqlDbType.Jsonb)
-                .ExecuteNonQueryAsync(token);
+                .With("json", json, NpgsqlDbType.Jsonb);
+            await cmd.ExecuteNonQueryAsync(token);
         }
         else
         {
-            await conn.CreateCommand(
-                    $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) values (@id, @json, @message)")
+            await using var cmd = conn.CreateCommand(
+                 $"insert into {table.TableName.QualifiedName} ({table.IdColumnName}, {table.JsonBodyColumnName}, {table.MessageTypeColumnName}) values (@id, @json, @message)")
                 .With("id", Guid.NewGuid())
                 .With("json", json, NpgsqlDbType.Jsonb)
-                .With("message", messageTypeName)
-                .ExecuteNonQueryAsync(token);
+                .With("message", messageTypeName);
+            await cmd.ExecuteNonQueryAsync(token);
         }
         
         await conn.CloseAsync();
