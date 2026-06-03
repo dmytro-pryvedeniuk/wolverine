@@ -126,6 +126,11 @@ partial class Build
                     Log.Warning("  Retry attempt {Attempt} for {Description}", attempt, description);
                 }
 
+                // Sanitize description for use in TRX filename
+                var safeName = SanitizeForFileName(description);
+                var attemptSuffix = attempt == 1 ? "" : $"-attempt{attempt}";
+                var trxLogger = $"trx;LogFileName={safeName}{attemptSuffix}.trx";
+
                 DotNetTest(c => c
                     .SetProjectFile(projectPath)
                     .SetConfiguration(Configuration)
@@ -133,7 +138,7 @@ partial class Build
                     .EnableNoRestore()
                     .SetFramework(framework)
                     .SetFilter(filter)
-                    .SetLoggers("trx"));
+                    .SetLoggers(trxLogger));
 
                 return true;
             }
@@ -152,6 +157,21 @@ partial class Build
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Sanitizes a string for safe use as a file name by replacing
+    /// characters that are invalid on Windows or Linux.
+    /// </summary>
+    static string SanitizeForFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+        // Collapse multiple underscores into one for readability
+        while (sanitized.Contains("__"))
+            sanitized = sanitized.Replace("__", "_");
+        // Trim leading/trailing underscores and dots
+        return sanitized.Trim('_', '.');
     }
 
     /// <summary>
