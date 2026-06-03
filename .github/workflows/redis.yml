@@ -27,6 +27,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Run Redis Tests
+        run: ./build.sh CIRedis --framework net9.0
+
       - name: Report results
         uses: dorny/test-reporter@v3
         if: ${{ !cancelled() }}
@@ -36,9 +39,6 @@ jobs:
           reporter: dotnet-trx
           list-suites: "failed"
           list-tests: "failed"
-
-      - name: Run Redis Tests
-        run: ./build.sh CIRedis --framework net9.0
 
       - name: Stop containers
         if: always()
