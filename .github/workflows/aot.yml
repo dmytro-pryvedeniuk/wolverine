@@ -30,12 +30,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 9.0.x
+          fetch-depth: 1
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
@@ -44,3 +39,13 @@ jobs:
 
       - name: Run AOT smoke
         run: ./build.sh CIAotSmoke
+
+      - name: Report results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: xUnit Tests
+          path: "**/TestResults/*.trx"
+          reporter: dotnet-trx
+          list-suites: "failed"
+          list-tests: "failed"

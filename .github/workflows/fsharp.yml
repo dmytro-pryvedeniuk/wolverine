@@ -47,12 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 9.0.x
+          fetch-depth: 1
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
@@ -67,22 +62,22 @@ jobs:
       # both fixtures transitively build Debug Wolverine.dll — concurrent nested builds race on
       # obj/Debug/.../refint/Wolverine.dll (IOException "used by another process"). Serializing avoids it.
       - name: Compile-gate + fsharp-coverage (Core surface)
-        run: dotnet test src/Testing/Wolverine.Core.FSharpTests/Wolverine.Core.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.Core.FSharpTests/Wolverine.Core.FSharpTests.csproj -c "$config" --nologo --logger "trx"
 
       - name: Compile-gate + fsharp-coverage (Http surface)
-        run: dotnet test src/Testing/Wolverine.Http.FSharpTests/Wolverine.Http.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.Http.FSharpTests/Wolverine.Http.FSharpTests.csproj -c "$config" --nologo --logger "trx"
 
       - name: Compile-gate (EF Core surface)
-        run: dotnet test src/Testing/Wolverine.EfCore.FSharpTests/Wolverine.EfCore.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.EfCore.FSharpTests/Wolverine.EfCore.FSharpTests.csproj -c "$config" --nologo --logger "trx"
 
       - name: Compile-gate (Marten document surface)
-        run: dotnet test src/Testing/Wolverine.Marten.FSharpTests/Wolverine.Marten.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.Marten.FSharpTests/Wolverine.Marten.FSharpTests.csproj -c "$config" --nologo --logger "trx"
 
       - name: Compile-gate (Marten aggregate surface)
-        run: dotnet test src/Testing/Wolverine.MartenAggregate.FSharpTests/Wolverine.MartenAggregate.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.MartenAggregate.FSharpTests/Wolverine.MartenAggregate.FSharpTests.csproj -c "$config" --nologo --logger "trx"
 
       - name: Compile-gate (FluentValidation + CosmosDB surface)
-        run: dotnet test src/Testing/Wolverine.Cosmos.FSharpTests/Wolverine.Cosmos.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.Cosmos.FSharpTests/Wolverine.Cosmos.FSharpTests.csproj -c "$config" --nologo --logger "trx"
 
       # Run-verified: boots a host in TypeLoadMode.Static against the pre-generated F# adapter and
       # asserts the handler actually executes (not just compiles). Also exercises the
@@ -90,4 +85,15 @@ jobs:
       # exits 0 (every chain — including Wolverine's internal HandlerRegistry — emits F#) and that the
       # generated adapter matches the committed, run-verified Generated.fs.
       - name: Behavioural run-step + codegen write --language fsharp (TypeLoadMode.Static)
-        run: dotnet test src/Testing/Wolverine.Behavioural.FSharpTests/Wolverine.Behavioural.FSharpTests.csproj -c "$config" --nologo
+        run: dotnet test src/Testing/Wolverine.Behavioural.FSharpTests/Wolverine.Behavioural.FSharpTests.csproj -c "$config" --nologo --logger "trx"
+
+      - name: Report results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: xUnit Tests
+          path: "**/TestResults/*.trx"
+          reporter: dotnet-trx
+          list-suites: "failed"
+          list-tests: "failed"
+
