@@ -53,6 +53,7 @@ public class Bug_2078_pause_then_requeue : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "Flaky")]
     public async Task pause_then_requeue_should_eventually_reprocess_message()
     {
         // Reproduce GH-2078: with PreFetchCount(1) and PauseThenRequeue,

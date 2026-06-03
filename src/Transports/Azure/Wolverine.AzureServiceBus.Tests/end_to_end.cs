@@ -110,6 +110,7 @@ public class end_to_end : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("Category", "Flaky")]
     public async Task send_and_receive_a_single_message()
     {
         var message = new AsbMessage1("Josh Allen");

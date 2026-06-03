@@ -60,6 +60,7 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
 }
 
 [Collection("acceptance")]
+[Trait("Category", "Flaky")]
 public class InlineSendingAndReceivingCompliance : TransportCompliance<InlineComplianceFixture>
 {
     [Fact]

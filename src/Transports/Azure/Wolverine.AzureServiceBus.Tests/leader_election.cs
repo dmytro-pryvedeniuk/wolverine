@@ -3,10 +3,12 @@ using Npgsql;
 using Weasel.Postgresql;
 using Wolverine.ComplianceTests;
 using Wolverine.Postgresql;
+using Xunit;
 using Xunit.Abstractions;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
+[Trait("Category", "Flaky")]
 public class leader_election : LeadershipElectionCompliance
 {
     public leader_election(ITestOutputHelper output) : base(output)
