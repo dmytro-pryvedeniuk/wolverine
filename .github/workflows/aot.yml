@@ -39,13 +39,3 @@ jobs:
 
       - name: Run AOT smoke
         run: ./build.sh CIAotSmoke
-
-      - name: Report results
-        uses: dorny/test-reporter@v3
-        if: ${{ !cancelled() }}
-        with:
-          name: xUnit Tests
-          path: "**/TestResults/*.trx"
-          reporter: dotnet-trx
-          list-suites: "failed"
-          list-tests: "failed"
