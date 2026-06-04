@@ -13,7 +13,6 @@ using Wolverine.SqlServer;
 
 namespace EfCoreTests.MultiTenancy;
 
-[Trait("Category", "Flaky")]
 public class multi_tenancy_with_master_table_approach_sqlserver : MultiTenancyCompliance
 {
     public multi_tenancy_with_master_table_approach_sqlserver() : base(DatabaseEngine.SqlServer)
