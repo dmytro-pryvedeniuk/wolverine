@@ -10,7 +10,6 @@ using Wolverine.Transports.Tcp;
 namespace CosmosDbTests;
 
 [Collection("cosmosdb")]
-[Trait("Category", "Flaky")]
 public class message_store_compliance : MessageStoreCompliance
 {
     private readonly AppFixture _fixture;
