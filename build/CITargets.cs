@@ -460,11 +460,20 @@ partial class Build
         .Executes(() =>
         {
             var cosmosDbTests = RootDirectory / "src" / "Persistence" / "CosmosDbTests" / "CosmosDbTests.csproj";
-            var leaderElectionTests = RootDirectory / "src" / "Persistence" / "LeaderElection" / "CosmosDbTests.LeaderElection" / "CosmosDbTests.LeaderElection.csproj";
 
-            BuildTestProjects(cosmosDbTests, leaderElectionTests);
+            BuildTestProjects(cosmosDbTests);
 
             RunWholeProjectWithRetry(cosmosDbTests);
+        });
+
+    Target CICosmosDbLeaderElection => _ => _
+        .ProceedAfterFailure()
+        .Executes(() =>
+        {
+            var leaderElectionTests = RootDirectory / "src" / "Persistence" / "LeaderElection" / "CosmosDbTests.LeaderElection" / "CosmosDbTests.LeaderElection.csproj";
+
+            BuildTestProjects(leaderElectionTests);
+
             RunWholeProjectWithRetry(leaderElectionTests);
         });
 
