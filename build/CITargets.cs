@@ -430,8 +430,8 @@ partial class Build
             BuildTestProjects(rabbitTests, circuitTests);
             StartDockerServices("rabbitmq", "postgresql", "sqlserver");
 
-            RunSingleProjectOneClassAtATime(rabbitTests);
-            RunSingleProjectOneClassAtATime(circuitTests);
+            RunWholeProjectWithRetry(rabbitTests);
+            RunWholeProjectWithRetry(circuitTests);
         });
 
     /// <summary>
@@ -464,8 +464,8 @@ partial class Build
 
             BuildTestProjects(cosmosDbTests, leaderElectionTests);
 
-            RunSingleProjectOneClassAtATime(cosmosDbTests);
-            RunSingleProjectOneClassAtATime(leaderElectionTests);
+            RunWholeProjectWithRetry(cosmosDbTests);
+            RunWholeProjectWithRetry(leaderElectionTests);
         });
 
     Target CIRavenDb => _ => _
@@ -535,7 +535,7 @@ partial class Build
             BuildTestProjects(tests);
             StartDockerServices("asb-emulator");
 
-            RunSingleProjectOneClassAtATime(tests);
+            RunWholeProjectWithRetry(tests);
         });
 
     Target CIPolecat => _ => _
