@@ -132,8 +132,7 @@ partial class Build
                     .EnableNoBuild()
                     .EnableNoRestore()
                     .SetFramework(framework)
-                    .SetFilter(filter)
-                    .SetLoggers("trx"));
+                    .SetFilter(filter));
 
                 return true;
             }
