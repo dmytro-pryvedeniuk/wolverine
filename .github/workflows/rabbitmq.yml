@@ -15,22 +15,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [CIRabbitMQ, CIRabbitMQCircuitBreaking]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 9.0.x
+          fetch-depth: 1
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
@@ -38,7 +32,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Run RabbitMQ Tests
-        run: ./build.sh CIRabbitMQ --framework net9.0
+        run: ./build.sh ${{ matrix.target }} --framework net9.0
 
       - name: Stop containers
         if: always()
