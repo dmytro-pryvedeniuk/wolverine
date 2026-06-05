@@ -6,8 +6,9 @@ using Xunit.Abstractions;
 
 namespace CosmosDbTests.LeaderElection;
 
+[Collection("cosmosdb")]
 public class leader_election(AppFixture fixture, ITestOutputHelper output)
-: LeadershipElectionCompliance(output), IClassFixture<AppFixture>
+    : LeadershipElectionCompliance(output)
 {
     protected override void configureNode(WolverineOptions opts)
     {

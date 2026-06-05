@@ -162,7 +162,7 @@ public class AzureServiceBusSubscription : AzureServiceBusEndpoint, IBrokerQueue
         stopwatch.Start();
         while (stopwatch.ElapsedMilliseconds < 2000)
         {
-            var session = await client.AcceptNextSessionAsync(Topic.TopicName, SubscriptionName, cancellationToken: cancellation.Token);
+            await using var session = await client.AcceptNextSessionAsync(Topic.TopicName, SubscriptionName, cancellationToken: cancellation.Token);
 
             var messages = await session.ReceiveMessagesAsync(25, 1.Seconds(), cancellation.Token);
             foreach (var message in messages) await session.CompleteMessageAsync(message, cancellation.Token);
@@ -176,7 +176,7 @@ public class AzureServiceBusSubscription : AzureServiceBusEndpoint, IBrokerQueue
 
     private async Task purgeWithoutSessions(ServiceBusClient client)
     {
-        var receiver = client.CreateReceiver(Topic.TopicName, SubscriptionName);
+        await using var receiver = client.CreateReceiver(Topic.TopicName, SubscriptionName);
 
         var stopwatch = new Stopwatch();
         stopwatch.Start();

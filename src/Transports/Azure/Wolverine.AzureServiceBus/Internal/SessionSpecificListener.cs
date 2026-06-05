@@ -64,6 +64,11 @@ internal class AzureServiceBusSessionListener : IListener
         _cancellation.Dispose();
         foreach (var task in _tasks)
             task.SafeDispose();
+
+        if (_requeue is IAsyncDisposable requeue)
+            await requeue.DisposeAsync();
+        else if (_requeue is IDisposable disposable)
+            disposable.Dispose();
     }
 
     public Uri Address => _endpoint.Uri;
@@ -83,7 +88,7 @@ internal class AzureServiceBusSessionListener : IListener
             {
                 await using var sessionReceiver =
                     await _transport.AcceptNextSessionAsync(_endpoint, _cancellation.Token);
-                var sessionListener =
+                await using var sessionListener =
                     new SessionSpecificListener(sessionReceiver, _endpoint, _receiver, _mapper, _logger, _requeue);
                 var count = await sessionListener.ExecuteAsync(_cancellation.Token);
 
@@ -198,9 +203,13 @@ internal class SessionSpecificListener : IListener, ISupportDeadLetterQueue
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return ValueTask.CompletedTask;
+        await _cancellation.CancelAsync();
+        _cancellation.Dispose();
+        _complete.SafeDispose();
+        _defer.SafeDispose();
+        _deadLetter.SafeDispose();
     }
 
     public Uri Address => _endpoint.Uri;

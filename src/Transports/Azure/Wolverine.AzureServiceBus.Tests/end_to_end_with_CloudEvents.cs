@@ -62,7 +62,7 @@ public class end_to_end_with_CloudEvents : IAsyncLifetime
 
         var session = await _host.TrackActivity()
             .IncludeExternalTransports()
-            .Timeout(5.Minutes())
+            .Timeout(30.Seconds())
             .SendMessageAndWaitAsync(message);
 
         session.Received.SingleMessage<AsbMessage1>()

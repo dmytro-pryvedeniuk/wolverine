@@ -84,7 +84,7 @@ public class end_to_end : IAsyncLifetime
     public async Task disable_system_queues()
     {
         #region sample_disable_system_queues_in_azure_service_bus
-        var host = await Host.CreateDefaultBuilder()
+        using var host = await Host.CreateDefaultBuilder()
             .UseWolverine(opts =>
             {
                 opts.UseAzureServiceBusTesting()
@@ -116,7 +116,7 @@ public class end_to_end : IAsyncLifetime
 
         var session = await _host.TrackActivity()
             .IncludeExternalTransports()
-            .Timeout(5.Minutes())
+            .Timeout(30.Seconds())
             .SendMessageAndWaitAsync(message);
 
         session.Received.SingleMessage<AsbMessage1>()

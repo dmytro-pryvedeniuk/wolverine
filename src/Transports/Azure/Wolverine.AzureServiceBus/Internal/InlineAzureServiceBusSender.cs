@@ -5,7 +5,7 @@ using Wolverine.Transports.Sending;
 
 namespace Wolverine.AzureServiceBus.Internal;
 
-public class InlineAzureServiceBusSender : ISender
+public class InlineAzureServiceBusSender : ISender, IAsyncDisposable
 {
     private readonly AzureServiceBusEndpoint _endpoint;
     private readonly IOutgoingMapper<ServiceBusMessage> _mapper;
@@ -49,5 +49,10 @@ public class InlineAzureServiceBusSender : ISender
         var message = new ServiceBusMessage();
         _mapper.MapEnvelopeToOutgoing(envelope, message);
         await _sender.SendMessageAsync(message, _cancellationToken);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return _sender.DisposeAsync();
     }
 }
