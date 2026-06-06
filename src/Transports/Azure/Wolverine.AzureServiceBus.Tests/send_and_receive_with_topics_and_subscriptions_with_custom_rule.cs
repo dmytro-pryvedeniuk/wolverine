@@ -49,7 +49,10 @@ public class TopicsWithCustomRuleComplianceFixture
     }
 }
 
-public class TopicAndSubscriptionWithCustomRuleSendingAndReceivingCompliance : TransportCompliance<TopicsWithCustomRuleComplianceFixture>
+public class TopicAndSubscriptionWithCustomRuleSendingAndReceivingCompliance(
+    TopicsWithCustomRuleComplianceFixture fixture)
+    : TransportCompliance<TopicsWithCustomRuleComplianceFixture>(fixture),
+        IClassFixture<TopicsWithCustomRuleComplianceFixture>
 {
     [Fact]
     public async Task ignores_message_not_matching_the_filter()

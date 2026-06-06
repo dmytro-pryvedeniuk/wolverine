@@ -176,17 +176,25 @@ public abstract class TransportCompliance<T> : IAsyncLifetime where T : Transpor
     protected Uri theOutboundAddress = null!;
     protected IHost theReceiver = null!;
     protected IHost theSender = null!;
+    private readonly bool _ownFixture;
 
     protected TransportCompliance()
     {
         Fixture = new T();
+        _ownFixture = true;
+    }
+
+    protected TransportCompliance(T fixture)
+    {
+        Fixture = fixture;
+        _ownFixture = false;
     }
 
     public T Fixture { get; }
 
     public async Task InitializeAsync()
     {
-        if (Fixture is IAsyncLifetime lifetime)
+        if (_ownFixture && Fixture is IAsyncLifetime lifetime)
         {
             await lifetime.InitializeAsync();
         }
@@ -210,14 +218,12 @@ public abstract class TransportCompliance<T> : IAsyncLifetime where T : Transpor
 
     public async Task DisposeAsync()
     {
+        if (!_ownFixture)
+            return;
         if (Fixture is IAsyncDisposable)
-        {
             await Fixture.DisposeAsync();
-        }
         else
-        {
             Fixture?.SafeDispose();
-        }
     }
 
     [Fact]
