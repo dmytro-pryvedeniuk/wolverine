@@ -102,6 +102,11 @@ public class InlineAzureServiceBusListener : IListener, ISupportDeadLetterQueue,
         _defer.SafeDispose();
         _deadLetter.SafeDispose();
         await _processor.DisposeAsync();
+
+        if (_requeue is IAsyncDisposable requeue)
+            await requeue.DisposeAsync();
+        else if (_requeue is IDisposable disposable)
+            disposable.Dispose();
     }
 
     public Uri Address => _endpoint.Uri;

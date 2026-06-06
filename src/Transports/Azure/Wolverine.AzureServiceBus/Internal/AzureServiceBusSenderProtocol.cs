@@ -69,9 +69,10 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
         var sentEnvelopes = new List<Envelope>();
         var pendingEnvelopes = new List<Envelope>();
 
+        ServiceBusMessageBatch serviceBusMessageBatch = null!;
         try
         {
-            var serviceBusMessageBatch = await _sender.CreateMessageBatchAsync();
+            serviceBusMessageBatch = await _sender.CreateMessageBatchAsync();
 
             foreach (var (envelope, message) in messages)
             {
@@ -120,6 +121,9 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
             var failedEnvelopes = batch.Messages.Where(env => !sentEnvelopes.Contains(env)).ToList();
             await callback.MarkProcessingFailureAsync(new OutgoingMessageBatch(batch.Destination, failedEnvelopes), e);
         }
+        finally{
+            serviceBusMessageBatch?.Dispose();
+        }
     }
 
     private async Task sendPartitionedBatches(ISenderCallback callback, List<(Envelope Envelope, ServiceBusMessage Message)> messages, OutgoingMessageBatch batch)
@@ -135,9 +139,10 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
         {
             var groupEnvelopes = group.Select(x => x.Envelope).ToList();
 
+            ServiceBusMessageBatch serviceBusMessageBatch = null!;
             try
             {
-                var serviceBusMessageBatch = await _sender.CreateMessageBatchAsync();
+                serviceBusMessageBatch = await _sender.CreateMessageBatchAsync();
 
                 _logger.LogDebug("Processing batch with session id '{SessionId}'", group.Key);
 
@@ -177,6 +182,9 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
             {
                 lastException = e;
                 break;
+            }
+            finally {
+                serviceBusMessageBatch?.Dispose();
             }
         }
 
