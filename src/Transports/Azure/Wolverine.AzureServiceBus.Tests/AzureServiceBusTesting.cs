@@ -5,18 +5,8 @@ namespace Wolverine.AzureServiceBus.Tests;
 
 public static class AzureServiceBusTesting
 {
-    private static bool _cleaned;
-
     public static AzureServiceBusConfiguration UseAzureServiceBusTesting(this WolverineOptions options)
     {
-        if (!_cleaned)
-        {
-            _cleaned = true;
-#pragma warning disable VSTHRD002 // Avoid problematic synchronous waits
-            DeleteAllEmulatorObjectsAsync().GetAwaiter().GetResult();
-#pragma warning restore VSTHRD002 // Avoid problematic synchronous waits
-        }
-
         var config = options.UseAzureServiceBus(Servers.AzureServiceBusConnectionString);
 
         var transport = options.Transports.GetOrCreate<AzureServiceBusTransport>();
