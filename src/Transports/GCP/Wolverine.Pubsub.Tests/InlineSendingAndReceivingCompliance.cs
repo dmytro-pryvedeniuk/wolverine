@@ -7,14 +7,15 @@ using Xunit;
 
 namespace Wolverine.Pubsub.Tests;
 
-public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineComplianceFixture : TransportComplianceFixture
 {
     public InlineComplianceFixture() : base(new Uri($"{PubsubTransport.ProtocolName}://wolverine/inline-receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var id = Guid.NewGuid().ToString();
 
         OutboundAddress = new Uri($"{PubsubTransport.ProtocolName}://wolverine/inline-receiver.{id}");
@@ -48,15 +49,11 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
                 .ProcessInline();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await DisposeAsync();
-    }
 }
 
 [Collection("acceptance")]
-public class InlineSendingAndReceivingCompliance : TransportCompliance<InlineComplianceFixture>
+public class InlineSendingAndReceivingCompliance(InlineComplianceFixture fixture)
+    : TransportCompliance<InlineComplianceFixture>(fixture)
 {
     [Fact]
     public virtual async Task dl_mechanics()

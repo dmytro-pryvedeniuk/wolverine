@@ -4,14 +4,15 @@ using Xunit;
 
 namespace Wolverine.Pulsar.Tests;
 
-public class PulsarWithCloudEventsFixture : TransportComplianceFixture, IAsyncLifetime
+public class PulsarWithCloudEventsFixture : TransportComplianceFixture
 {
     public PulsarWithCloudEventsFixture() : base(null!)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var topic = Guid.NewGuid().ToString();
         var topicPath = $"persistent://public/default/compliance{topic}";
         OutboundAddress = PulsarEndpointUri.Topic(topicPath);
@@ -35,11 +36,6 @@ public class PulsarWithCloudEventsFixture : TransportComplianceFixture, IAsyncLi
 
     public record FakeMessage;
 
-    async Task IAsyncLifetime.DisposeAsync()
-    {
-        await ((IAsyncDisposable)this).DisposeAsync();
-    }
-
     public override void BeforeEach()
     {
         // A cooldown makes these tests far more reliable
@@ -49,7 +45,8 @@ public class PulsarWithCloudEventsFixture : TransportComplianceFixture, IAsyncLi
 
 [Collection("acceptance")]
 [Trait("Category", "Flaky")]
-public class with_cloud_events : TransportCompliance<PulsarWithCloudEventsFixture>
+public class with_cloud_events(PulsarWithCloudEventsFixture fixture)
+    : TransportCompliance<PulsarWithCloudEventsFixture>(fixture)
 {
     // This test uses ErrorCausingMessage which contains a Dictionary<int, Exception>.
     // Exception objects don't serialize/deserialize properly with System.Text.Json,

@@ -8,14 +8,15 @@ using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
-public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class BufferedComplianceFixture : TransportComplianceFixture
 {
     public BufferedComplianceFixture() : base(new Uri("asb://queue/buffered-receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var queueName = Guid.NewGuid().ToString();
         OutboundAddress = new Uri("asb://queue/" + queueName);
 
@@ -34,11 +35,6 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
         });
     }
 
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
-
     protected override Task AfterDisposeAsync()
     {
         return AzureServiceBusTesting.DeleteAllEmulatorObjectsAsync();
@@ -46,7 +42,8 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
 }
 
 [Trait("Category", "Flaky")]
-public class BufferedSendingAndReceivingCompliance : TransportCompliance<BufferedComplianceFixture>
+public class BufferedSendingAndReceivingCompliance(BufferedComplianceFixture fixture)
+    : TransportCompliance<BufferedComplianceFixture>(fixture)
 {
     [Fact]
     public virtual async Task dlq_mechanics()

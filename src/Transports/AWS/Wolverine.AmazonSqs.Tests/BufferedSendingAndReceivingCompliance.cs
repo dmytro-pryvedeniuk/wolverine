@@ -7,14 +7,15 @@ using Wolverine.Runtime;
 
 namespace Wolverine.AmazonSqs.Tests;
 
-public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class BufferedComplianceFixture : TransportComplianceFixture
 {
     public BufferedComplianceFixture() : base(new Uri("sqs://receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = Guid.NewGuid().ToString().Replace(".", "-");
 
         OutboundAddress = new Uri("sqs://receiver-" + number);
@@ -37,14 +38,10 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
             opts.ListenToSqsQueue("receiver-" + number).Named("receiver").BufferedInMemory();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class BufferedSendingAndReceivingCompliance : TransportCompliance<BufferedComplianceFixture>
+public class BufferedSendingAndReceivingCompliance(BufferedComplianceFixture fixture)
+    : TransportCompliance<BufferedComplianceFixture>(fixture)
 {
     [Fact]
     public virtual async Task dlq_mechanics()

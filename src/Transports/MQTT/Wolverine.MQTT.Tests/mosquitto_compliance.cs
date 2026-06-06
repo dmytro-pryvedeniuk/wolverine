@@ -9,7 +9,7 @@ using Xunit.Abstractions;
 
 namespace Wolverine.MQTT.Tests;
 
-public class MosquittoBufferedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class MosquittoBufferedComplianceFixture : TransportComplianceFixture
 {
     public static int Number = 0;
 
@@ -17,8 +17,9 @@ public class MosquittoBufferedComplianceFixture : TransportComplianceFixture, IA
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Number;
         var receiverTopic = "mosquitto-receiver-" + number;
         var senderTopic = "mosquitto-sender-" + number;
@@ -46,15 +47,11 @@ public class MosquittoBufferedComplianceFixture : TransportComplianceFixture, IA
             opts.ListenToMqttTopic(receiverTopic).Named("receiver").RetainMessages().BufferedInMemory();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        // Nothing extra to dispose; Mosquitto runs in Docker
-    }
 }
 
 [Collection("mosquitto")]
-public class MosquittoBufferedCompliance : TransportCompliance<MosquittoBufferedComplianceFixture>;
+public class MosquittoBufferedCompliance(MosquittoBufferedComplianceFixture fixture)
+    : TransportCompliance<MosquittoBufferedComplianceFixture>(fixture);
 
 /// <summary>
 /// GH-2213: Verifies that shared subscriptions with a specific topic work

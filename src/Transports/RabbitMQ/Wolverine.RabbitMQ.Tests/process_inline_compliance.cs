@@ -11,14 +11,15 @@ using Xunit;
 namespace Wolverine.RabbitMQ.Tests;
 
 
-public class ProcessInlineFixture : TransportComplianceFixture, IAsyncLifetime
+public class ProcessInlineFixture : TransportComplianceFixture
 {
     public ProcessInlineFixture() : base($"rabbitmq://queue/inline1".ToUri())
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         OutboundAddress = $"rabbitmq://queue/inline1".ToUri();
 
         await SenderIs(opts =>
@@ -51,14 +52,9 @@ public class ProcessInlineFixture : TransportComplianceFixture, IAsyncLifetime
             opts.ListenToRabbitQueue("inline1").TelemetryEnabled(false);
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class process_inline_compliance : TransportCompliance<ProcessInlineFixture>
+public class process_inline_compliance(ProcessInlineFixture fixture) 
+    : TransportCompliance<ProcessInlineFixture>(fixture)
 {
-
 }

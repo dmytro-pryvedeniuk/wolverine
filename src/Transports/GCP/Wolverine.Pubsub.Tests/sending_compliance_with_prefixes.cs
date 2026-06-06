@@ -6,14 +6,15 @@ using Xunit;
 
 namespace Wolverine.Pubsub.Tests;
 
-public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class PrefixedComplianceFixture : TransportComplianceFixture
 {
     public PrefixedComplianceFixture() : base(new Uri($"{PubsubTransport.ProtocolName}://wolverine/foo.receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var id = Guid.NewGuid().ToString();
 
         OutboundAddress = new Uri($"{PubsubTransport.ProtocolName}://wolverine/foo.receiver.{id}");
@@ -42,15 +43,11 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
                 .Named("receiver");
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await DisposeAsync();
-    }
 }
 
 [Collection("acceptance")]
-public class PrefixedSendingAndReceivingCompliance : TransportCompliance<PrefixedComplianceFixture>
+public class PrefixedSendingAndReceivingCompliance(PrefixedComplianceFixture fixture)
+    : TransportCompliance<PrefixedComplianceFixture>(fixture)
 {
     [Fact]
     public void prefix_was_applied_to_endpoint_for_the_receiver()

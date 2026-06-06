@@ -11,14 +11,15 @@ using Xunit;
 
 namespace Wolverine.RabbitMQ.Tests;
 
-public class QuorumQueueFixture : TransportComplianceFixture, IAsyncLifetime
+public class QuorumQueueFixture : TransportComplianceFixture
 {
     public QuorumQueueFixture() : base($"rabbitmq://queue/quorum1".ToUri())
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         OutboundAddress = $"rabbitmq://queue/quorum1".ToUri();
 
         await SenderIs(opts =>
@@ -48,14 +49,10 @@ public class QuorumQueueFixture : TransportComplianceFixture, IAsyncLifetime
             opts.ListenToRabbitQueue("quorum1").TelemetryEnabled(false);
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class quorum_queue_compliance : TransportCompliance<QuorumQueueFixture>
+public class quorum_queue_compliance(QuorumQueueFixture fixture)
+    : TransportCompliance<QuorumQueueFixture>(fixture)
 {
     [Fact]
     public void all_queues_are_declared_as_quorum()

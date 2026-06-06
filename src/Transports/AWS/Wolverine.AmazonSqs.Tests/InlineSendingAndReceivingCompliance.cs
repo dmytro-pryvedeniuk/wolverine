@@ -7,7 +7,7 @@ using Wolverine.Runtime;
 
 namespace Wolverine.AmazonSqs.Tests;
 
-public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineComplianceFixture : TransportComplianceFixture
 {
     public static int Number;
 
@@ -15,8 +15,9 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Number;
 
         OutboundAddress = new Uri("sqs://receiver-" + number);
@@ -43,14 +44,10 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
             opts.ListenToSqsQueue("receiver-" + number).Named("receiver").ProcessInline();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class InlineSendingAndReceivingCompliance : TransportCompliance<InlineComplianceFixture>
+public class InlineSendingAndReceivingCompliance(InlineComplianceFixture fixture)
+    : TransportCompliance<InlineComplianceFixture>(fixture)
 {
     [Fact]
     public virtual async Task dlq_mechanics()

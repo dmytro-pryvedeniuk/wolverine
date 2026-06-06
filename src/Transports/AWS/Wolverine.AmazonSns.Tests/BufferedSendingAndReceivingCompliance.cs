@@ -4,15 +4,16 @@ using Wolverine.ComplianceTests.Compliance;
 
 namespace Wolverine.AmazonSns.Tests;
 
-public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class BufferedComplianceFixture : TransportComplianceFixture
 {
     public BufferedComplianceFixture() : base(new Uri($"{AmazonSnsTransport.SnsProtocol}://receiver"), 120)
     {
         IsSenderOnlyTransport = true;
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = Guid.NewGuid().ToString().Replace(".", "-");
 
         OutboundAddress = new Uri($"{AmazonSnsTransport.SnsProtocol}://receiver-" + number);
@@ -31,7 +32,7 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
             opts.UseAmazonSqsTransportLocally()
                 .AutoProvision().AutoPurgeOnStartup();
 
-            opts.ListenToSqsQueue("sender-" + number).ReceiveSnsTopicMessage();;
+            opts.ListenToSqsQueue("sender-" + number).ReceiveSnsTopicMessage();
             
             opts.UseAmazonSnsTransportLocally()
                 .AutoProvision();
@@ -41,13 +42,9 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
                 .SubscribeSqsQueue("receiver-" + number);
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class BufferedSendingAndReceivingCompliance : TransportCompliance<BufferedComplianceFixture>
+public class BufferedSendingAndReceivingCompliance(BufferedComplianceFixture fixture)
+    : TransportCompliance<BufferedComplianceFixture>(fixture)
 {
 }

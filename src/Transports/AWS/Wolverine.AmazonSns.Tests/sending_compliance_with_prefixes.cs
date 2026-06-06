@@ -8,7 +8,7 @@ using Wolverine.Runtime;
 
 namespace Wolverine.AmazonSns.Tests;
 
-public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class PrefixedComplianceFixture : TransportComplianceFixture
 {
     public static int Number;
 
@@ -17,8 +17,9 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
         IsSenderOnlyTransport = true;
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Number;
         OutboundAddress = new Uri($"{AmazonSnsTransport.SnsProtocol}://boo-prefix-topic-" + number);
 
@@ -54,14 +55,10 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
                 .SubscribeSqsQueue("foo-prefix-receiver-" + number);
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class PrefixedSendingAndReceivingCompliance : TransportCompliance<PrefixedComplianceFixture>
+public class PrefixedSendingAndReceivingCompliance(PrefixedComplianceFixture fixture)
+    : TransportCompliance<PrefixedComplianceFixture>(fixture)
 {
     [Fact]
     public void prefix_was_applied_to_topics_for_the_sender()

@@ -4,14 +4,15 @@ using Xunit;
 
 namespace Wolverine.Pulsar.Tests;
 
-public class InlinePulsarTransportFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlinePulsarTransportFixture : TransportComplianceFixture
 {
     public InlinePulsarTransportFixture() : base(null!)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var topic = Guid.NewGuid().ToString();
         var topicPath = $"persistent://public/default/{topic}";
         OutboundAddress = PulsarEndpointUri.Topic(topicPath);
@@ -31,11 +32,6 @@ public class InlinePulsarTransportFixture : TransportComplianceFixture, IAsyncLi
         });
     }
 
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
-
     public override void BeforeEach()
     {
         // These tests are *far* more reliable with a cooldown
@@ -45,4 +41,5 @@ public class InlinePulsarTransportFixture : TransportComplianceFixture, IAsyncLi
 
 [Collection("acceptance")]
 [Trait("Category", "Flaky")]
-public class InlinePulsarTransportComplianceTests : TransportCompliance<InlinePulsarTransportFixture>;
+public class InlinePulsarTransportComplianceTests(InlinePulsarTransportFixture fixture)
+    : TransportCompliance<InlinePulsarTransportFixture>(fixture);

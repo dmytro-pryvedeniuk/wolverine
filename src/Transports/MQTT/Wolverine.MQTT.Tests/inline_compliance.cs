@@ -8,7 +8,7 @@ using Wolverine.Util;
 
 namespace Wolverine.MQTT.Tests;
 
-public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineComplianceFixture : TransportComplianceFixture
 {
     public static int Number = 0;
 
@@ -16,18 +16,16 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var port = PortFinder.GetAvailablePort();
 
         var number = ++Number;
         var receiverTopic = "receiver-" + number;
         var senderTopic = "sender-" + number;
 
-        Broker = new LocalMqttBroker(port)
-        {
-
-        };
+        Broker = new LocalMqttBroker(port);
 
         await Broker.StartAsync();
 
@@ -52,16 +50,18 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
 
     public LocalMqttBroker Broker { get; private set; } = null!;
 
-    public new async Task DisposeAsync()
+    public override async Task DisposeAsync()
     {
         await Broker.StopAsync();
         await Broker.DisposeAsync();
+        await base.DisposeAsync();
     }
 }
 
 [Collection("acceptance")]
 [Trait("Category", "Flaky")]
-public class InlineSendingAndReceivingCompliance : TransportCompliance<InlineComplianceFixture>
+public class InlineSendingAndReceivingCompliance(InlineComplianceFixture fixture)
+    : TransportCompliance<InlineComplianceFixture>(fixture)
 {
     [Fact]
     public void has_response_topic_automatically()

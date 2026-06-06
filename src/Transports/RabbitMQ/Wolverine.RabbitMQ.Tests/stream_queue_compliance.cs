@@ -9,14 +9,15 @@ using Xunit;
 namespace Wolverine.RabbitMQ.Tests;
 
 
-public class StreamQueueFixture : TransportComplianceFixture, IAsyncLifetime
+public class StreamQueueFixture : TransportComplianceFixture
 {
     public StreamQueueFixture() : base($"rabbitmq://queue/stream1".ToUri())
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         OutboundAddress = $"rabbitmq://queue/stream1".ToUri();
 
         await SenderIs(opts =>
@@ -43,14 +44,10 @@ public class StreamQueueFixture : TransportComplianceFixture, IAsyncLifetime
             opts.ListenToRabbitQueue("stream1").TelemetryEnabled(false);
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class stream_queue_compliance : TransportCompliance<StreamQueueFixture>
+public class stream_queue_compliance(StreamQueueFixture fixture)
+    : TransportCompliance<StreamQueueFixture>(fixture)
 {
     [Fact]
     public void all_queues_are_declared_as_stream()

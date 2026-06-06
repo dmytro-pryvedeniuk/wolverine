@@ -9,14 +9,15 @@ using Wolverine.Util;
 
 namespace MartenTests;
 
-public class DurableTcpTransportFixture : TransportComplianceFixture, IAsyncLifetime
+public class DurableTcpTransportFixture : TransportComplianceFixture
 {
     public DurableTcpTransportFixture() : base($"tcp://localhost:{PortFinder.GetAvailablePort()}/incoming".ToUri())
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         OutboundAddress = $"tcp://localhost:{PortFinder.GetAvailablePort()}/incoming/durable".ToUri();
 
         await SenderIs(opts =>
@@ -46,11 +47,7 @@ public class DurableTcpTransportFixture : TransportComplianceFixture, IAsyncLife
             opts.Durability.Mode = DurabilityMode.Solo;
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class DurableTcpTransportCompliance : TransportCompliance<DurableTcpTransportFixture>;
+public class DurableTcpTransportCompliance(DurableTcpTransportFixture fixture)
+    : TransportCompliance<DurableTcpTransportFixture>(fixture);

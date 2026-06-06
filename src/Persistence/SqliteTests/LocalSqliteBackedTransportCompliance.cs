@@ -5,7 +5,7 @@ using Wolverine.Sqlite;
 
 namespace SqliteTests;
 
-public class LocalSqliteBackedFixture : TransportComplianceFixture, IAsyncLifetime
+public class LocalSqliteBackedFixture : TransportComplianceFixture
 {
     private readonly string _connectionString;
     private readonly SqliteTestDatabase _database;
@@ -16,16 +16,17 @@ public class LocalSqliteBackedFixture : TransportComplianceFixture, IAsyncLifeti
         _connectionString = _database.ConnectionString;
     }
 
-    public Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        return TheOnlyAppIs(opts =>
+        await base.InitializeAsync();
+        await TheOnlyAppIs(opts =>
         {
             opts.PersistMessagesWithSqlite(_connectionString);
             opts.Durability.Mode = DurabilityMode.Solo;
         });
     }
 
-    public new async Task DisposeAsync()
+    public override async Task DisposeAsync()
     {
         await base.DisposeAsync();
         _database.Dispose();
@@ -33,7 +34,8 @@ public class LocalSqliteBackedFixture : TransportComplianceFixture, IAsyncLifeti
 }
 
 [Collection("sqlite")]
-public class LocalSqliteBackedTransportCompliance : TransportCompliance<LocalSqliteBackedFixture>
+public class LocalSqliteBackedTransportCompliance(LocalSqliteBackedFixture fixture) 
+    : TransportCompliance<LocalSqliteBackedFixture>(fixture)
 {
     // The inherited test verifies "from one node to another" delivery, which
     // assumes a true multi-node broker transport (Rabbit, Azure SB, ...). The

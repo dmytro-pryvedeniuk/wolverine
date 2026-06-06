@@ -9,14 +9,15 @@ using Xunit.Sdk;
 
 namespace Wolverine.Kafka.Tests;
 
-public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class BufferedComplianceFixture : TransportComplianceFixture
 {
     public BufferedComplianceFixture() : base(new Uri("kafka://topic/receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var receiverTopic = "buffered.receiver";
         var senderTopic = "buffered.sender";
 
@@ -43,16 +44,12 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
             opts.Services.AddResourceSetupOnStartup();
         });
     }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
 }
 
-public class BufferedSendingAndReceivingCompliance : TransportCompliance<BufferedComplianceFixture>;
+public class BufferedSendingAndReceivingCompliance(BufferedComplianceFixture fixture)
+    : TransportCompliance<BufferedComplianceFixture>(fixture);
 
-public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineComplianceFixture : TransportComplianceFixture
 {
     public static int Number = 0;
 
@@ -60,8 +57,9 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var receiverTopic = "receiver.inline";
         var senderTopic = "sender.inline";
 
@@ -91,11 +89,7 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
             opts.Services.AddResourceSetupOnStartup();
         });
     }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
 }
 
-public class InlineSendingAndReceivingCompliance : TransportCompliance<InlineComplianceFixture>;
+public class InlineSendingAndReceivingCompliance(InlineComplianceFixture fixture)
+    : TransportCompliance<InlineComplianceFixture>(fixture);

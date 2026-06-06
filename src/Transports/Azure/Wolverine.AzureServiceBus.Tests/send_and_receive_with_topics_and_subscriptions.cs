@@ -3,14 +3,15 @@ using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
-public class TopicsComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class TopicsComplianceFixture : TransportComplianceFixture
 {
     public TopicsComplianceFixture() : base(new Uri("asb://topic/topic1"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UseAzureServiceBusTesting()
@@ -26,15 +27,11 @@ public class TopicsComplianceFixture : TransportComplianceFixture, IAsyncLifetim
         });
     }
 
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
-
     protected override Task AfterDisposeAsync()
     {
         return AzureServiceBusTesting.DeleteAllEmulatorObjectsAsync();
     }
 }
 
-public class TopicAndSubscriptionSendingAndReceivingCompliance : TransportCompliance<TopicsComplianceFixture>;
+public class TopicAndSubscriptionSendingAndReceivingCompliance(TopicsComplianceFixture fixture)
+    : TransportCompliance<TopicsComplianceFixture>(fixture);

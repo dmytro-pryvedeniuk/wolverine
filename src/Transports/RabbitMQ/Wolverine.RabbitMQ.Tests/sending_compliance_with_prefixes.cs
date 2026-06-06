@@ -7,14 +7,15 @@ using Xunit;
 
 namespace Wolverine.RabbitMQ.Tests;
 
-public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class PrefixedComplianceFixture : TransportComplianceFixture
 {
     public PrefixedComplianceFixture() : base(new Uri("rabbitmq://queue/foo-buffered-receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UseRabbitMq()
@@ -35,14 +36,10 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
             opts.ListenToRabbitQueue("buffered-receiver");
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class PrefixedSendingAndReceivingCompliance : TransportCompliance<PrefixedComplianceFixture>
+public class PrefixedSendingAndReceivingCompliance(PrefixedComplianceFixture fixture)
+    : TransportCompliance<PrefixedComplianceFixture>(fixture)
 {
     [Fact]
     public void prefix_was_applied_to_queues_for_the_receiver()

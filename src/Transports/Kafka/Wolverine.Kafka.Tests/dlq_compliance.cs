@@ -5,14 +5,15 @@ using Wolverine.ComplianceTests.Compliance;
 
 namespace Wolverine.Kafka.Tests;
 
-public class BufferedComplianceWithDlqFixture : TransportComplianceFixture, IAsyncLifetime
+public class BufferedComplianceWithDlqFixture : TransportComplianceFixture
 {
     public BufferedComplianceWithDlqFixture() : base(new Uri("kafka://topic/receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var receiverTopic = "buffered.dlq.receiver";
         var senderTopic = "buffered.dlq.sender";
 
@@ -43,11 +44,7 @@ public class BufferedComplianceWithDlqFixture : TransportComplianceFixture, IAsy
             opts.Services.AddResourceSetupOnStartup();
         });
     }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
 }
 
-public class BufferedSendingAndReceivingWithDlqCompliance : TransportCompliance<BufferedComplianceWithDlqFixture>;
+public class BufferedSendingAndReceivingWithDlqCompliance(BufferedComplianceWithDlqFixture fixture)
+    : TransportCompliance<BufferedComplianceWithDlqFixture>(fixture);

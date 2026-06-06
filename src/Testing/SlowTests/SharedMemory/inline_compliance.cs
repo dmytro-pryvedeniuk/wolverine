@@ -4,15 +4,16 @@ using Xunit;
 
 namespace SlowTests.SharedMemory;
 
-public class InlineSharedMemoryInlineFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineSharedMemoryInlineFixture : TransportComplianceFixture
 {
     public InlineSharedMemoryInlineFixture() : base(new Uri("shared-memory://receiver"), 5)
     {
         AllLocally = true;
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SharedMemoryQueueManager.ClearAllAsync();
         
         await ReceiverIs(opts =>
@@ -27,13 +28,12 @@ public class InlineSharedMemoryInlineFixture : TransportComplianceFixture, IAsyn
         });
     }
 
-    public new Task DisposeAsync()
+    public override async Task DisposeAsync()
     {
-        return SharedMemoryQueueManager.ClearAllAsync();
+        await base.DisposeAsync();
+        await SharedMemoryQueueManager.ClearAllAsync();
     }
 }
 
-public class inline_compliance : TransportCompliance<InlineSharedMemoryInlineFixture>
-{
-    
-}
+public class inline_compliance(InlineSharedMemoryInlineFixture fixture)
+    : TransportCompliance<InlineSharedMemoryInlineFixture>(fixture);

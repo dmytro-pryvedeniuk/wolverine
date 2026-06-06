@@ -9,14 +9,15 @@ using Wolverine.Tracking;
 
 namespace SqlServerTests.Transport;
 
-public class SqlTransportDurableFixture : TransportComplianceFixture, IAsyncLifetime
+public class SqlTransportDurableFixture : TransportComplianceFixture
 {
     public SqlTransportDurableFixture() : base("sqlserver://receiver".ToUri(), 10)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UseSqlServerPersistenceAndTransport(Servers.SqlServerConnectionString, "durable")
@@ -42,23 +43,20 @@ public class SqlTransportDurableFixture : TransportComplianceFixture, IAsyncLife
             opts.Durability.ScheduledJobFirstExecution = 0.Seconds();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class SqlServerTransport_Durable_Compliance : TransportCompliance<SqlTransportDurableFixture>;
+public class SqlServerTransport_Durable_Compliance(SqlTransportDurableFixture fixture) 
+    : TransportCompliance<SqlTransportDurableFixture>(fixture);
 
-public class SqlTransportBufferedFixture : TransportComplianceFixture, IAsyncLifetime
+public class SqlTransportBufferedFixture : TransportComplianceFixture
 {
     public SqlTransportBufferedFixture() : base("sqlserver://receiver".ToUri(), 10)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UseSqlServerPersistenceAndTransport(Servers.SqlServerConnectionString, "buffered_compliance")
@@ -89,14 +87,10 @@ public class SqlTransportBufferedFixture : TransportComplianceFixture, IAsyncLif
             opts.Durability.ScheduledJobFirstExecution = 0.Seconds();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class SqlServerTransport_Buffered_Compliance : TransportCompliance<SqlTransportBufferedFixture>
+public class SqlServerTransport_Buffered_Compliance(SqlTransportBufferedFixture fixture) 
+    : TransportCompliance<SqlTransportBufferedFixture>(fixture)
 {
     [Fact]
     public void endpoints_are_all_buffered()

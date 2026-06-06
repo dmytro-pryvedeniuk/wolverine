@@ -4,14 +4,15 @@ using Xunit;
 
 namespace Wolverine.RabbitMQ.Tests;
 
-public class InlineRabbitMqTransportFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineRabbitMqTransportFixture : TransportComplianceFixture
 {
     public InlineRabbitMqTransportFixture() : base($"rabbitmq://queue/{RabbitTesting.NextQueueName()}".ToUri())
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var queueName = RabbitTesting.NextQueueName() + "_inline";
         OutboundAddress = $"rabbitmq://queue/{queueName}".ToUri();
 
@@ -33,11 +34,7 @@ public class InlineRabbitMqTransportFixture : TransportComplianceFixture, IAsync
             opts.ListenToRabbitQueue(queueName).ProcessInline().TelemetryEnabled(false);
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class InlineRabbitMqTransportComplianceTests : TransportCompliance<InlineRabbitMqTransportFixture>;
+public class InlineRabbitMqTransportComplianceTests(InlineRabbitMqTransportFixture fixture) 
+    : TransportCompliance<InlineRabbitMqTransportFixture>(fixture);

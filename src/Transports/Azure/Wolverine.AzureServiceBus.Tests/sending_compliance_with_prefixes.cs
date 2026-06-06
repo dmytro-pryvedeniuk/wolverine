@@ -8,14 +8,15 @@ using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
-public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class PrefixedComplianceFixture : TransportComplianceFixture
 {
     public PrefixedComplianceFixture() : base(new Uri("asb://queue/foo.buffered-receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var queueName = Guid.NewGuid().ToString();
         OutboundAddress = new Uri("asb://queue/foo." + queueName);
 
@@ -37,18 +38,14 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
         });
     }
 
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
-
     protected override Task AfterDisposeAsync()
     {
         return AzureServiceBusTesting.DeleteAllEmulatorObjectsAsync();
     }
 }
 
-public class PrefixedSendingAndReceivingCompliance : TransportCompliance<PrefixedComplianceFixture>
+public class PrefixedSendingAndReceivingCompliance(PrefixedComplianceFixture fixture)
+    : TransportCompliance<PrefixedComplianceFixture>(fixture)
 {
     [Fact]
     public void prefix_was_applied_to_queues_for_the_receiver()

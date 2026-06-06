@@ -8,14 +8,15 @@ using Xunit;
 
 namespace Wolverine.Redis.Tests;
 
-public class RedisInlineComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class RedisInlineComplianceFixture : TransportComplianceFixture
 {
     public RedisInlineComplianceFixture() : base(new Uri("redis://stream/0/receiver"), 120)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var receiverStream = $"wolverine-tests-inline-receiver-{Guid.NewGuid():N}";
         OutboundAddress = new Uri($"redis://stream/0/{receiverStream}");
 
@@ -30,15 +31,9 @@ public class RedisInlineComplianceFixture : TransportComplianceFixture, IAsyncLi
             opts.UseRedisTransport(RedisContainerFixture.ConnectionString).AutoProvision();
             opts.PublishAllMessages().ToRedisStream(receiverStream).SendInline();
         });
-
-
-    }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
     }
 }
 
-public class InlineSendingAndReceivingCompliance : TransportCompliance<RedisInlineComplianceFixture>;
+public class InlineSendingAndReceivingCompliance(RedisInlineComplianceFixture fixture)
+    : TransportCompliance<RedisInlineComplianceFixture>(fixture);
 

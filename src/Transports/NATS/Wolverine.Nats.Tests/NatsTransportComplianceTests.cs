@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Wolverine.Nats.Tests;
 
-public class InlineNatsTransportFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineNatsTransportFixture : TransportComplianceFixture
 {
     public static int Counter = 0;
 
@@ -14,8 +14,9 @@ public class InlineNatsTransportFixture : TransportComplianceFixture, IAsyncLife
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Counter;
         var receiverSubject = $"compliance.receiver.inline.{number}";
         var senderSubject = $"compliance.sender.inline.{number}";
@@ -37,17 +38,13 @@ public class InlineNatsTransportFixture : TransportComplianceFixture, IAsyncLife
             opts.ListenToNatsSubject(receiverSubject).Named("receiver").ProcessInline();
         });
     }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
 }
 
 [Collection("NATS Compliance")]
-public class InlineNatsTransportComplianceTests : TransportCompliance<InlineNatsTransportFixture>;
+public class InlineNatsTransportComplianceTests(InlineNatsTransportFixture fixture)
+    : TransportCompliance<InlineNatsTransportFixture>(fixture);
 
-public class BufferedNatsTransportFixture : TransportComplianceFixture, IAsyncLifetime
+public class BufferedNatsTransportFixture : TransportComplianceFixture
 {
     public static int Counter = 0;
 
@@ -55,8 +52,9 @@ public class BufferedNatsTransportFixture : TransportComplianceFixture, IAsyncLi
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Counter;
         var receiverSubject = $"compliance.receiver.buffered.{number}";
         var senderSubject = $"compliance.sender.buffered.{number}";
@@ -78,17 +76,13 @@ public class BufferedNatsTransportFixture : TransportComplianceFixture, IAsyncLi
             opts.ListenToNatsSubject(receiverSubject).Named("receiver").BufferedInMemory();
         });
     }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
 }
 
 [Collection("NATS Compliance")]
-public class BufferedNatsTransportComplianceTests : TransportCompliance<BufferedNatsTransportFixture>;
+public class BufferedNatsTransportComplianceTests(BufferedNatsTransportFixture fixture)
+    : TransportCompliance<BufferedNatsTransportFixture>(fixture);
 
-public class JetStreamNatsTransportFixture : TransportComplianceFixture, IAsyncLifetime
+public class JetStreamNatsTransportFixture : TransportComplianceFixture
 {
     public static int Counter = 0;
 
@@ -96,8 +90,9 @@ public class JetStreamNatsTransportFixture : TransportComplianceFixture, IAsyncL
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Counter;
         var streamName = $"COMPLIANCE_{number}";
         var receiverSubject = $"compliance.receiver.js.{number}";
@@ -132,16 +127,10 @@ public class JetStreamNatsTransportFixture : TransportComplianceFixture, IAsyncL
                 .UseJetStream(streamName, $"receiver-consumer-{number}");
         });
     }
-
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
-
-
 }
 
 [Collection("NATS Compliance")]
-public class JetStreamNatsTransportComplianceTests : TransportCompliance<JetStreamNatsTransportFixture>;
+public class JetStreamNatsTransportComplianceTests(JetStreamNatsTransportFixture fixture)
+    : TransportCompliance<JetStreamNatsTransportFixture>(fixture);
 
 #endif

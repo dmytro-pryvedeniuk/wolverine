@@ -9,8 +9,9 @@ public class RedisTransportFixture : TransportComplianceFixture
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UseRedisTransport(RedisContainerFixture.ConnectionString)

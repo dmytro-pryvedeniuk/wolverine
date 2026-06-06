@@ -7,10 +7,11 @@ using Xunit;
 namespace Wolverine.AzureServiceBus.Tests;
 
 public class TopicsWithCustomRuleComplianceFixture()
-    : TransportComplianceFixture(new Uri("asb://topic/topic1"), 120), IAsyncLifetime
+    : TransportComplianceFixture(new Uri("asb://topic/topic1"), 120)
 {
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UseAzureServiceBusTesting()
@@ -32,18 +33,14 @@ public class TopicsWithCustomRuleComplianceFixture()
         });
     }
 
-    public new Task DisposeAsync()
-    {
-        return Task.CompletedTask;
-    }
-
     protected override Task AfterDisposeAsync()
     {
         return AzureServiceBusTesting.DeleteAllEmulatorObjectsAsync();
     }
 }
 
-public class TopicAndSubscriptionWithCustomRuleSendingAndReceivingCompliance : TransportCompliance<TopicsWithCustomRuleComplianceFixture>
+public class TopicAndSubscriptionWithCustomRuleSendingAndReceivingCompliance(TopicsWithCustomRuleComplianceFixture fixture)
+    : TransportCompliance<TopicsWithCustomRuleComplianceFixture>(fixture)
 {
     [Fact]
     public async Task ignores_message_not_matching_the_filter()

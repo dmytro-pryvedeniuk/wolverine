@@ -6,26 +6,23 @@ using Wolverine.Postgresql;
 
 namespace PostgresqlTests;
 
-public class LocalPostgresqlBackedFixture : TransportComplianceFixture, IAsyncLifetime
+public class LocalPostgresqlBackedFixture : TransportComplianceFixture
 {
     public LocalPostgresqlBackedFixture() : base("local://one/durable".ToUri())
     {
     }
 
-    public Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
-        return TheOnlyAppIs(opts =>
+        await base.InitializeAsync();
+        await TheOnlyAppIs(opts =>
         {
             opts.PersistMessagesWithPostgresql(Servers.PostgresConnectionString);
             opts.Durability.Mode = DurabilityMode.Solo;
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
 [Collection("marten")]
-public class LocalPostgresqlBackedTransportCompliance : TransportCompliance<LocalPostgresqlBackedFixture>;
+public class LocalPostgresqlBackedTransportCompliance(LocalPostgresqlBackedFixture fixture)
+    : TransportCompliance<LocalPostgresqlBackedFixture>(fixture);

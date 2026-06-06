@@ -17,19 +17,13 @@ using Xunit;
 
 namespace Wolverine.ComplianceTests.Compliance;
 
-public abstract class TransportComplianceFixture : IDisposable, IAsyncDisposable
+public abstract class TransportComplianceFixture(Uri destination, int defaultTimeInSeconds = 5)
+    : IAsyncLifetime
 {
-    public readonly TimeSpan DefaultTimeout = 5.Seconds();
-
-    protected TransportComplianceFixture(Uri destination, int defaultTimeInSeconds = 5)
-    {
-        OutboundAddress = destination;
-        DefaultTimeout = defaultTimeInSeconds.Seconds();
-    }
-
+    public readonly TimeSpan DefaultTimeout = defaultTimeInSeconds.Seconds();
     public IHost Sender { get; private set; } = null!;
     public IHost Receiver { get; private set; } = null!;
-    public Uri OutboundAddress { get; protected set; }
+    public Uri OutboundAddress { get; protected set; } = destination;
 
     public bool AllLocally { get; set; }
 
@@ -37,15 +31,15 @@ public abstract class TransportComplianceFixture : IDisposable, IAsyncDisposable
     
     public bool IsSenderOnlyTransport { get; set; }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (Sender == null)
-        {
-            return;
-        }
+    public virtual Task InitializeAsync() => Task.CompletedTask;
 
-        await Sender.StopAsync();
-        Sender.Dispose();
+    public virtual async Task DisposeAsync()
+    {
+        if (Sender != null)
+        {
+            await Sender.StopAsync();
+            Sender.Dispose();
+        }
 
         if (Receiver != null)
         {
@@ -67,15 +61,6 @@ public abstract class TransportComplianceFixture : IDisposable, IAsyncDisposable
     protected virtual Task AfterDisposeAsync()
     {
         return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        Sender?.Dispose();
-        if (!ReferenceEquals(Sender, Receiver))
-        {
-            Receiver?.Dispose();
-        }
     }
 
     protected async Task TheOnlyAppIs(Action<WolverineOptions> configure)
@@ -169,7 +154,8 @@ public abstract class TransportComplianceFixture : IDisposable, IAsyncDisposable
     }
 }
 
-public abstract class TransportCompliance<T> : IAsyncLifetime where T : TransportComplianceFixture, new()
+public abstract class TransportCompliance<T> : IClassFixture<T>, IAsyncLifetime
+    where T : TransportComplianceFixture, new()
 {
     protected readonly ErrorCausingMessage theMessage = new();
     private ITrackedSession _session = null!;
@@ -177,45 +163,28 @@ public abstract class TransportCompliance<T> : IAsyncLifetime where T : Transpor
     protected IHost theReceiver = null!;
     protected IHost theSender = null!;
 
-    protected TransportCompliance()
+    protected TransportCompliance(T fixture)
     {
-        Fixture = new T();
+        Fixture = fixture;
+
+        theSender = Fixture.Sender;
+        theReceiver = Fixture.Receiver;
+        theOutboundAddress = Fixture.OutboundAddress;
     }
 
     public T Fixture { get; }
 
     public async Task InitializeAsync()
     {
-        if (Fixture is IAsyncLifetime lifetime)
-        {
-            await lifetime.InitializeAsync();
-        }
-
-        theSender = Fixture.Sender;
-        theReceiver = Fixture.Receiver;
-        theOutboundAddress = Fixture.OutboundAddress;
-
         await Fixture.Sender.ResetResourceState();
 
         if (Fixture.Receiver != null && !ReferenceEquals(Fixture.Sender, Fixture.Receiver))
-        {
             await Fixture.Receiver.ResetResourceState();
-        }
 
         Fixture.BeforeEach();
     }
 
-    public async Task DisposeAsync()
-    {
-        if (Fixture is IAsyncDisposable)
-        {
-            await Fixture.DisposeAsync();
-        }
-        else
-        {
-            Fixture?.SafeDispose();
-        }
-    }
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public void all_listeners_say_they_are_accepting_on_startup()

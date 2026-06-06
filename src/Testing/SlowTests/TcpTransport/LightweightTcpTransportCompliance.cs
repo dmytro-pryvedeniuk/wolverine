@@ -7,24 +7,21 @@ using Xunit;
 
 namespace SlowTests.TcpTransport;
 
-public class LightweightTcpFixture : TransportComplianceFixture, IAsyncLifetime
+public class LightweightTcpFixture : TransportComplianceFixture
 {
     public LightweightTcpFixture() : base($"tcp://localhost:{PortFinder.GetAvailablePort()}/incoming".ToUri())
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts => { opts.ListenAtPort(PortFinder.GetAvailablePort()); });
 
         await ReceiverIs(opts => { opts.ListenAtPort(OutboundAddress.Port); });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await DisposeAsync();
-    }
 }
 
 [Collection("compliance")]
-public class LightweightTcpTransportCompliance : TransportCompliance<LightweightTcpFixture>;
+public class LightweightTcpTransportCompliance(LightweightTcpFixture fixture)
+    : TransportCompliance<LightweightTcpFixture>(fixture);

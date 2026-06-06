@@ -9,14 +9,15 @@ using Wolverine.Tracking;
 
 namespace PostgresqlTests.Transport;
 
-public class PostgresqlTransportDurableFixture : TransportComplianceFixture, IAsyncLifetime
+public class PostgresqlTransportDurableFixture : TransportComplianceFixture
 {
     public PostgresqlTransportDurableFixture() : base("postgresql://receiver".ToUri(), 10)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UsePostgresqlPersistenceAndTransport(Servers.PostgresConnectionString, "durable", transportSchema:"durable")
@@ -39,24 +40,21 @@ public class PostgresqlTransportDurableFixture : TransportComplianceFixture, IAs
             opts.Durability.ScheduledJobFirstExecution = 0.Seconds();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
 [Collection("marten")]
-public class PostgresqlTransport_Durable_Compliance : TransportCompliance<PostgresqlTransportDurableFixture>;
+public class PostgresqlTransport_Durable_Compliance(PostgresqlTransportDurableFixture fixture) 
+    : TransportCompliance<PostgresqlTransportDurableFixture>(fixture);
 
-public class PostgresqlTransportBufferedFixture : TransportComplianceFixture, IAsyncLifetime
+public class PostgresqlTransportBufferedFixture : TransportComplianceFixture
 {
     public PostgresqlTransportBufferedFixture() : base("postgresql://receiver".ToUri(), 10)
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         await SenderIs(opts =>
         {
             opts.UsePostgresqlPersistenceAndTransport(Servers.PostgresConnectionString, "buffered_compliance")
@@ -87,23 +85,15 @@ public class PostgresqlTransportBufferedFixture : TransportComplianceFixture, IA
             opts.Services.AddResourceSetupOnStartup();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
 [Collection("sqlserver")]
-public class PostgresqlTransport_Buffered_Compliance : TransportCompliance<PostgresqlTransportBufferedFixture>
+public class PostgresqlTransport_Buffered_Compliance(PostgresqlTransportBufferedFixture fixture) 
+    : TransportCompliance<PostgresqlTransportBufferedFixture>(fixture)
 {
     [Fact]
     public void endpoints_are_all_buffered()
     {
-        // theSender.GetRuntime().Endpoints.EndpointFor(new Uri("sqlserver://receiver")).Mode.ShouldBe(EndpointMode.BufferedInMemory);
-        // theSender.GetRuntime().Endpoints.EndpointFor(new Uri("sqlserver://sender")).Mode.ShouldBe(EndpointMode.BufferedInMemory);
-        //
-        // theReceiver.GetRuntime().Endpoints.EndpointFor(new Uri("sqlserver://receiver")).Mode.ShouldBe(EndpointMode.BufferedInMemory);
         theReceiver.GetRuntime().Endpoints.GetOrBuildSendingAgent(new Uri("postgresql://sender")).Endpoint.Mode.ShouldBe(EndpointMode.BufferedInMemory);
     }
 }

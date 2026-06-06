@@ -4,7 +4,7 @@ using Wolverine.ComplianceTests.Compliance;
 
 namespace Wolverine.AmazonSns.Tests;
 
-public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class InlineComplianceFixture : TransportComplianceFixture
 {
     private static int _number;
 
@@ -13,8 +13,9 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
         IsSenderOnlyTransport = true;
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++_number;
 
         OutboundAddress = new Uri($"{AmazonSnsTransport.SnsProtocol}://receiver-" + number);
@@ -46,13 +47,9 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
                 .SendInline();
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class InlineSendingAndReceivingCompliance : TransportCompliance<InlineComplianceFixture>
+public class InlineSendingAndReceivingCompliance(InlineComplianceFixture fixture)
+    : TransportCompliance<InlineComplianceFixture>(fixture)
 {
 }

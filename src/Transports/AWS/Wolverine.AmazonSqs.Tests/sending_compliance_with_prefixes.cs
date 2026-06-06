@@ -6,7 +6,7 @@ using Wolverine.Runtime;
 
 namespace Wolverine.AmazonSqs.Tests;
 
-public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class PrefixedComplianceFixture : TransportComplianceFixture
 {
     public static int Number;
 
@@ -14,8 +14,9 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         var number = ++Number;
         OutboundAddress = new Uri("sqs://foo-prefix-receiver-" + number);
 
@@ -39,14 +40,10 @@ public class PrefixedComplianceFixture : TransportComplianceFixture, IAsyncLifet
             opts.ListenToSqsQueue("prefix-receiver-" + number).Named("prefix-receiver");
         });
     }
-
-    public new async Task DisposeAsync()
-    {
-        await base.DisposeAsync();
-    }
 }
 
-public class PrefixedSendingAndReceivingCompliance : TransportCompliance<PrefixedComplianceFixture>
+public class PrefixedSendingAndReceivingCompliance(PrefixedComplianceFixture fixture)
+    : TransportCompliance<PrefixedComplianceFixture>(fixture)
 {
     [Fact]
     public void prefix_was_applied_to_queues_for_the_receiver()

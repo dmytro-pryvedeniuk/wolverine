@@ -2,7 +2,7 @@ using Wolverine.ComplianceTests.Compliance;
 using Wolverine.Grpc;
 using Xunit;
 
-public class GrpcComplianceFixture : TransportComplianceFixture, IAsyncLifetime
+public class GrpcComplianceFixture : TransportComplianceFixture
 {
     public const int ReceiverPort = 5150;
     public const int SenderPort = 5151;
@@ -11,8 +11,9 @@ public class GrpcComplianceFixture : TransportComplianceFixture, IAsyncLifetime
     {
     }
 
-    public async Task InitializeAsync()
+    public override async Task InitializeAsync()
     {
+        await base.InitializeAsync();
         OutboundAddress = new Uri($"grpc://localhost:{ReceiverPort}");
 
         await ReceiverIs(opts =>
@@ -26,9 +27,8 @@ public class GrpcComplianceFixture : TransportComplianceFixture, IAsyncLifetime
             opts.PublishAllMessages().ToGrpcEndpoint("localhost", ReceiverPort);
         });
     }
-
-    public new Task DisposeAsync() => Task.CompletedTask;
 }
 
 [Collection("GrpcSerialTests")]
-public class GrpcTransportCompliance : TransportCompliance<GrpcComplianceFixture>;
+public class GrpcTransportCompliance(GrpcComplianceFixture fixture)
+    : TransportCompliance<GrpcComplianceFixture>(fixture);
