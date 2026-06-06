@@ -198,9 +198,13 @@ internal class SessionSpecificListener : IListener, ISupportDeadLetterQueue
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return ValueTask.CompletedTask;
+        await _cancellation.CancelAsync();
+        _cancellation.Dispose();
+        _complete.SafeDispose();
+        _defer.SafeDispose();
+        _deadLetter.SafeDispose();
     }
 
     public Uri Address => _endpoint.Uri;

@@ -6,7 +6,7 @@ using Wolverine.Transports.Sending;
 
 namespace Wolverine.AzureServiceBus.Internal;
 
-public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
+public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling, IAsyncDisposable
 {
     private readonly AzureServiceBusEndpoint _endpoint;
     private readonly IOutgoingMapper<ServiceBusMessage> _mapper;
@@ -50,6 +50,11 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
             await sendPartitionedBatches(callback, messages, batch);
         else
             await sendBatches(callback, messages, batch);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return _sender.DisposeAsync();
     }
 
     private async Task sendBatches(ISenderCallback callback, List<(Envelope Envelope, ServiceBusMessage Message)> messages, OutgoingMessageBatch batch)
