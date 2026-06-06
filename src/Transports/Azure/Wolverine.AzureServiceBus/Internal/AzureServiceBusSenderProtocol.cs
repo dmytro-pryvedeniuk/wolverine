@@ -6,7 +6,7 @@ using Wolverine.Transports.Sending;
 
 namespace Wolverine.AzureServiceBus.Internal;
 
-public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling, IAsyncDisposable
+public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling, IAsyncDisposable, IDisposable
 {
     private readonly AzureServiceBusEndpoint _endpoint;
     private readonly IOutgoingMapper<ServiceBusMessage> _mapper;
@@ -51,6 +51,13 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
         else
             await sendBatches(callback, messages, batch);
     }
+
+#pragma warning disable VSTHRD002
+    public void Dispose()
+    {
+        _sender.DisposeAsync().GetAwaiter().GetResult();
+    }
+#pragma warning restore VSTHRD002
 
     public ValueTask DisposeAsync()
     {
