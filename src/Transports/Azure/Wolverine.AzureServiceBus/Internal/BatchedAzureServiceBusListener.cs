@@ -87,6 +87,7 @@ public class BatchedAzureServiceBusListener : IListener, ISupportDeadLetterQueue
         _complete.SafeDispose();
         _defer.SafeDispose();
         _deadLetter.SafeDispose();
+        await _receiver.DisposeAsync();
     }
 
     public Uri Address => _endpoint.Uri;

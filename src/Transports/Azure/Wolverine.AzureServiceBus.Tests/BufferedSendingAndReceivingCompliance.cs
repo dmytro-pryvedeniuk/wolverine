@@ -64,9 +64,8 @@ public class BufferedSendingAndReceivingCompliance : TransportCompliance<Buffere
         var queue = transport.Queues[AzureServiceBusTransport.DeadLetterQueueName];
         await queue.InitializeAsync(NullLogger.Instance);
 
-        var messageReceiver = transport.BusClient.CreateReceiver(AzureServiceBusTransport.DeadLetterQueueName);
+        await using var messageReceiver = transport.BusClient.CreateReceiver(AzureServiceBusTransport.DeadLetterQueueName);
         var queued = await messageReceiver.ReceiveMessageAsync();
         queued.ShouldNotBeNull();
-
     }
 }
