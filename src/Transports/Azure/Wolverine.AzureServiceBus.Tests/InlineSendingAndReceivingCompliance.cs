@@ -8,6 +8,7 @@ public class InlineComplianceFixture : TransportComplianceFixture, IAsyncLifetim
 {
     public InlineComplianceFixture() : base(new Uri("asb://queue/inline-receiver"), 120)
     {
+        MustReset = false;
     }
 
     public async Task InitializeAsync()

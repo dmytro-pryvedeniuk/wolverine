@@ -33,7 +33,7 @@ public abstract class TransportComplianceFixture : IDisposable, IAsyncDisposable
 
     public bool AllLocally { get; set; }
 
-    public bool MustReset { get; set; } = false;
+    public bool MustReset { get; set; } = true;
     
     public bool IsSenderOnlyTransport { get; set; }
 
@@ -195,11 +195,14 @@ public abstract class TransportCompliance<T> : IAsyncLifetime where T : Transpor
         theReceiver = Fixture.Receiver;
         theOutboundAddress = Fixture.OutboundAddress;
 
-        await Fixture.Sender.ResetResourceState();
-
-        if (Fixture.Receiver != null && !ReferenceEquals(Fixture.Sender, Fixture.Receiver))
+        if (Fixture.MustReset)
         {
-            await Fixture.Receiver.ResetResourceState();
+            await Fixture.Sender.ResetResourceState();
+
+            if (Fixture.Receiver != null && !ReferenceEquals(Fixture.Sender, Fixture.Receiver))
+            {
+                await Fixture.Receiver.ResetResourceState();
+            }
         }
 
         Fixture.BeforeEach();

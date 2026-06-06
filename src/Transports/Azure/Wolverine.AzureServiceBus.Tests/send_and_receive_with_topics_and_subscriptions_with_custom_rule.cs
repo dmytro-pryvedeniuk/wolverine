@@ -6,9 +6,15 @@ using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
-public class TopicsWithCustomRuleComplianceFixture()
-    : TransportComplianceFixture(new Uri("asb://topic/topic1"), 120), IAsyncLifetime
+public class TopicsWithCustomRuleComplianceFixture
+    : TransportComplianceFixture, IAsyncLifetime
 {
+    public TopicsWithCustomRuleComplianceFixture()
+        : base(new Uri("asb://topic/topic1"), 120)
+    {
+        MustReset = false;
+    }
+
     public async Task InitializeAsync()
     {
         await SenderIs(opts =>

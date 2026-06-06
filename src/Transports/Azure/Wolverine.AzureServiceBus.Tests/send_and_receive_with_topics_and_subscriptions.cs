@@ -7,6 +7,7 @@ public class TopicsComplianceFixture : TransportComplianceFixture, IAsyncLifetim
 {
     public TopicsComplianceFixture() : base(new Uri("asb://topic/topic1"), 120)
     {
+        MustReset = false;
     }
 
     public async Task InitializeAsync()
