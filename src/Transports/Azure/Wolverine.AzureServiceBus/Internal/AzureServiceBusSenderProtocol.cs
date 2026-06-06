@@ -6,7 +6,7 @@ using Wolverine.Transports.Sending;
 
 namespace Wolverine.AzureServiceBus.Internal;
 
-public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling, IAsyncDisposable, IDisposable
+public sealed class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling, IAsyncDisposable, IDisposable
 {
     private readonly AzureServiceBusEndpoint _endpoint;
     private readonly IOutgoingMapper<ServiceBusMessage> _mapper;
@@ -81,8 +81,10 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
                     // If the batch is empty and the message still doesn't fit, it's too large for any batch
                     if (serviceBusMessageBatch.Count == 0)
                     {
+                        var maxSize = serviceBusMessageBatch.MaxSizeInBytes;
                         serviceBusMessageBatch.Dispose();
-                        throw new MessageTooLargeException(envelope, serviceBusMessageBatch.MaxSizeInBytes);
+                        serviceBusMessageBatch = null!;
+                        throw new MessageTooLargeException(envelope, maxSize);
                     }
 
                     _logger.LogInformation("Wolverine had to break up outgoing message batches at {Uri}, you may want to reduce the MaximumMessagesToReceive configuration. No messages were lost, this is strictly informative", _endpoint.Uri);
@@ -95,8 +97,6 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
                     pendingEnvelopes.Clear();
 
                     serviceBusMessageBatch.Dispose();
-
-                    // Create a new batch and add the message to it
                     serviceBusMessageBatch = await _sender.CreateMessageBatchAsync();
                     serviceBusMessageBatch.TryAddMessage(message);
                 }
@@ -108,6 +108,7 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
             await _sender.SendMessagesAsync(serviceBusMessageBatch, _runtime.Cancellation);
             sentEnvelopes.AddRange(pendingEnvelopes);
             serviceBusMessageBatch.Dispose();
+            serviceBusMessageBatch = null!;
 
             await callback.MarkSuccessfulAsync(batch);
         }
@@ -153,17 +154,18 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
                         // If the batch is empty and the message still doesn't fit, it's too large for any batch
                         if (serviceBusMessageBatch.Count == 0)
                         {
+                            var maxSize = serviceBusMessageBatch.MaxSizeInBytes;
                             serviceBusMessageBatch.Dispose();
-                            throw new MessageTooLargeException(envelope, serviceBusMessageBatch.MaxSizeInBytes);
+                            serviceBusMessageBatch = null!;
+                            throw new MessageTooLargeException(envelope, maxSize);
                         }
 
                         _logger.LogInformation("Wolverine had to break up outgoing message batches at {Uri}, you may want to reduce the MaximumMessagesToReceive configuration. No messages were lost, this is strictly informative", _endpoint.Uri);
 
                         // Send the currently full batch
                         await _sender.SendMessagesAsync(serviceBusMessageBatch, _runtime.Cancellation);
-                        serviceBusMessageBatch.Dispose();
 
-                        // Create a new batch and add the message to it
+                        serviceBusMessageBatch.Dispose();
                         serviceBusMessageBatch = await _sender.CreateMessageBatchAsync();
                         serviceBusMessageBatch.TryAddMessage(message);
                     }
@@ -175,6 +177,7 @@ public class AzureServiceBusSenderProtocol : ISenderProtocolWithNativeScheduling
                     await _sender.SendMessagesAsync(serviceBusMessageBatch, _runtime.Cancellation);
                 }
                 serviceBusMessageBatch.Dispose();
+                serviceBusMessageBatch = null!;
 
                 sentEnvelopes.AddRange(groupEnvelopes);
             }
