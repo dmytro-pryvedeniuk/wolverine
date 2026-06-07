@@ -38,7 +38,7 @@ public static class RabbitTesting
     }
 }
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class end_to_end
 {
     private readonly ITestOutputHelper _output;

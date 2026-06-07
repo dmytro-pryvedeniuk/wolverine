@@ -10,7 +10,7 @@ using Wolverine.ComplianceTests.Compliance;
 
 namespace Wolverine.AmazonSqs.Tests.Samples;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class Bootstrapping
 {
     private async Task use_named_brokers()

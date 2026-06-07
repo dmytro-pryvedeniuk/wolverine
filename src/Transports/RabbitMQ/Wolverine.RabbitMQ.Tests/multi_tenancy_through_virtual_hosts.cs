@@ -144,7 +144,7 @@ public class MultiTenantedRabbitFixture : IAsyncLifetime
     }
 }
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class multi_tenancy_through_virtual_hosts : IClassFixture<MultiTenantedRabbitFixture>
 {
     private readonly MultiTenantedRabbitFixture _fixture;

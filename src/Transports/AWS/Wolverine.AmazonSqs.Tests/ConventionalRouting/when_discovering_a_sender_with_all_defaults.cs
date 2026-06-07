@@ -6,7 +6,7 @@ using Wolverine.Runtime.Routing;
 
 namespace Wolverine.AmazonSqs.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class when_discovering_a_sender_with_all_defaults : ConventionalRoutingContext, IAsyncLifetime
 {
     private MessageRoute theRoute = null!;

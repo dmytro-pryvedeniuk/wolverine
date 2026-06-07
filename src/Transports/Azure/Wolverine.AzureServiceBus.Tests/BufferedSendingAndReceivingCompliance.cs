@@ -46,7 +46,7 @@ public class BufferedComplianceFixture : TransportComplianceFixture, IAsyncLifet
     }
 }
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class BufferedSendingAndReceivingCompliance(BufferedComplianceFixture fixture)
     : TransportCompliance<BufferedComplianceFixture>(fixture),
         IClassFixture<BufferedComplianceFixture>

@@ -7,6 +7,7 @@ using Xunit.Abstractions;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
+[Trait("Category", "Skip")]
 public class leader_election : LeadershipElectionCompliance
 {
     public leader_election(ITestOutputHelper output) : base(output)

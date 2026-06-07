@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class StatefulResourceSmokeTests : IAsyncLifetime
 {
     public Task InitializeAsync() => Task.CompletedTask;

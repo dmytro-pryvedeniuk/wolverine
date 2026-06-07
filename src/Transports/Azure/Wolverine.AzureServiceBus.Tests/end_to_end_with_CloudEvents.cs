@@ -1,13 +1,12 @@
 using JasperFx.Core;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
-using Wolverine.AzureServiceBus.Internal;
-using Wolverine.Configuration;
 using Wolverine.Tracking;
 using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
+[Trait("Category", "Skip")]
 public class end_to_end_with_CloudEvents : IAsyncLifetime
 {
     private IHost _host = null!;

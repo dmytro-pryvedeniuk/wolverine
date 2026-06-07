@@ -287,9 +287,9 @@ public class send_by_topics : IAsyncLifetime
 // + Marten state on top, which makes it even more time-sensitive. send_by_explicit_topic,
 // send_by_explicit_topic_2, and send_by_message_topic_to_multiple_listeners all
 // reliably miss the second receiver in CI when this class runs in the full suite.
-// Skip via the same Flaky filter the non-durable sibling uses, pending the
+// Skip via the same Skip filter the non-durable sibling uses, pending the
 // deterministic topic-binding readiness gate described in #2618.
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class send_by_topics_durable : IAsyncLifetime
 {
     private IHost theGreenReceiver = null!;

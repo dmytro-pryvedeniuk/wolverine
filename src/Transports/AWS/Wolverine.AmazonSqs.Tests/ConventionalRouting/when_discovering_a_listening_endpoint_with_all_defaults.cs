@@ -5,7 +5,7 @@ using Wolverine.Configuration;
 
 namespace Wolverine.AmazonSqs.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class when_discovering_a_listening_endpoint_with_all_defaults : ConventionalRoutingContext, IAsyncLifetime
 {
     private readonly Uri theExpectedUri = "sqs://routed".ToUri();

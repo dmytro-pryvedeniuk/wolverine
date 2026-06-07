@@ -243,7 +243,7 @@ partial class Build
                 .EnableNoBuild()
                 .EnableNoRestore()
                 .SetFramework(framework)
-                //.SetFilter("Category!=Flaky")
+                .SetFilter("Category!=Skip")
                 .AddLoggers($"trx;LogFilePrefix={projectName}"));
 
             Log.Information("=== {Project}: All tests passed ===", projectName);

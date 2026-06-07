@@ -6,11 +6,10 @@ using Wolverine.ComplianceTests;
 using Wolverine.Runtime;
 using Wolverine.Transports;
 using Wolverine.Util;
-using Xunit;
 
 namespace Wolverine.AmazonSqs.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class when_using_handler_type_naming : IAsyncLifetime, IDisposable
 {
     private IHost _host = null!;

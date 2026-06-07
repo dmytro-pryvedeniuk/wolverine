@@ -7,7 +7,7 @@ using Xunit.Abstractions;
 
 namespace Wolverine.AzureServiceBus.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class discover_with_naming_prefix : IDisposable
 {
     private readonly IHost _host;

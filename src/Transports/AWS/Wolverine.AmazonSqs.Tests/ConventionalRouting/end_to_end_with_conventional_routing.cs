@@ -6,7 +6,7 @@ using Wolverine.Tracking;
 
 namespace Wolverine.AmazonSqs.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class end_to_end_with_conventional_routing : IAsyncLifetime, IDisposable
 {
     private IHost _receiver = null!;

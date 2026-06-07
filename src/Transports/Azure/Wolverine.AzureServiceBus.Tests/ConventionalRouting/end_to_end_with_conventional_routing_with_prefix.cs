@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class end_to_end_with_conventional_routing_with_prefix : IAsyncLifetime
 {
     private IHost _receiver = null!;

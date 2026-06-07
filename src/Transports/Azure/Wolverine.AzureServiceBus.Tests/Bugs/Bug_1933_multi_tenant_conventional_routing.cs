@@ -16,7 +16,7 @@ public static class Bug1933MessageHandler
     }
 }
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class Bug_1933_multi_tenant_conventional_routing : IAsyncLifetime
 {
     public Task InitializeAsync() => Task.CompletedTask;

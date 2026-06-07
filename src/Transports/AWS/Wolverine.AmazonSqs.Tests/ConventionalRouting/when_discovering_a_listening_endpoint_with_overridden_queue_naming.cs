@@ -4,7 +4,7 @@ using Wolverine.AmazonSqs.Internal;
 
 namespace Wolverine.AmazonSqs.Tests.ConventionalRouting;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class when_discovering_a_listening_endpoint_with_overridden_queue_naming : ConventionalRoutingContext, IAsyncLifetime
 {
     private readonly Uri theExpectedUri = "sqs://routedmessage2".ToUri();

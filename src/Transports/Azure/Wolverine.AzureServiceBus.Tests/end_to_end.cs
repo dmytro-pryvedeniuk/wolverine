@@ -4,12 +4,11 @@ using Shouldly;
 using Wolverine.AzureServiceBus.Internal;
 using Wolverine.Configuration;
 using Wolverine.Tracking;
-using Wolverine.Transports;
 using Xunit;
 
 namespace Wolverine.AzureServiceBus.Tests;
 
-[Trait("Category", "Flaky")]
+[Trait("Category", "Skip")]
 public class end_to_end : IAsyncLifetime
 {
     private IHost _host = null!;
