@@ -264,7 +264,7 @@ partial class Build
             BuildTestProjects(sqlServerTests);
             StartDockerServices("sqlserver");
 
-            RunSingleProjectOneClassAtATime(sqlServerTests);
+            RunWholeProjectWithRetry(sqlServerTests);
         });
 
     Target CIMarten => _ => _
@@ -277,13 +277,6 @@ partial class Build
             BuildTestProjects(martenTests, martenSubscriptionTests);
             StartDockerServices("postgresql");
 
-            // #2810: run each project in a single invocation rather than one
-            // dotnet-test spawn per test class. MartenTests has 111 test files;
-            // the per-class spawn overhead (process start + assembly load +
-            // xUnit discovery + per-fixture Postgres/daemon warm-up) dominated
-            // the ~22 min wall clock. Execution stays serial via the project's
-            // CollectionPerAssembly attribute, so isolation between classes is
-            // unchanged at the concurrency level — see RunWholeProjectWithRetry.
             RunWholeProjectWithRetry(martenTests);
             RunWholeProjectWithRetry(martenSubscriptionTests);
         });
