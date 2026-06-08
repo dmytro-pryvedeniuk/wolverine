@@ -1,0 +1,50 @@
+name: test-template
+
+on:
+  workflow_call:
+    inputs:
+      TARGET:
+        required: true
+        type: string
+
+env:
+  config: Release
+  disable_test_parallelization: true
+  BUILD_TARGET: ${{ inputs.TARGET }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+        matrix:
+            run: [1, 2, 3, 4, 5]   # repeat
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run tests
+        run: ./build.sh "$BUILD_TARGET" --framework net9.0
+
+      - name: Report results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: xUnit Tests
+          path: "**/TestResults/*.trx"
+          reporter: dotnet-trx
+          fail-on-error: false
+          list-suites: "failed"
+          list-tests: "failed"
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
