@@ -56,7 +56,7 @@ partial class Build
                 classes.Add(stripped[..lastDot]);
         }
 
-        return classes.ToArray();
+        return [.. classes];
     }
 
     /// <summary>
@@ -102,16 +102,15 @@ partial class Build
     }
 
     /// <summary>
-    /// Result of a test run: passed first try, passed on retry (flaky), or failed.
-    /// </summary>
-    enum TestOutcome { Passed, Flaky, Failed }
-
-    /// <summary>
     /// Runs a single dotnet test invocation with retry logic.
     /// Returns Passed, Flaky (passed on retry), or Failed.
     /// </summary>
-    TestOutcome RunTestWithRetry(string projectPath, string filter, string description, int maxAttempts = 3, string frameworkOverride = null)
+    TestOutcome RunTestWithRetry(string projectPath, 
+        string fullTestName, int maxAttempts = 3, string frameworkOverride = null)
     {
+        var projectName = Path.GetFileNameWithoutExtension(projectPath);
+        var filter = $"FullyQualifiedName~{EscapeFilterValue(fullTestName)}";
+        var description = $"{projectName}/{fullTestName}";
         var framework = frameworkOverride ?? Framework;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -126,7 +125,8 @@ partial class Build
                     .EnableNoBuild()
                     .EnableNoRestore()
                     .SetFramework(framework)
-                    .SetFilter(filter));
+                    .SetFilter(filter)
+                    .AddLoggers($"trx;LogFilePrefix={projectName}-{attempt}.trx"));
 
                 return attempt > 1 ? TestOutcome.Flaky : TestOutcome.Passed;
             }
@@ -282,8 +282,7 @@ partial class Build
         {
             var outcome = RunTestWithRetry(
                 projectPath,
-                $"FullyQualifiedName~{EscapeFilterValue(fullTestName)}",
-                $"{projectName}/{fullTestName}",
+                fullTestName,
                 maxAttempts,
                 framework);
 
@@ -301,6 +300,11 @@ partial class Build
         Log.Information("=== {Project}: All tests passed (with flaky retries) ===", projectName);
         return true;
     }
+
+    /// <summary>
+    /// Result of a test run: passed first try, passed on retry (flaky), or failed.
+    /// </summary>
+    enum TestOutcome { Passed, Flaky, Failed }
 
     class RunResult
     {
