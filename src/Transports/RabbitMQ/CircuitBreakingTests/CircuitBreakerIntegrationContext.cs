@@ -14,15 +14,15 @@ using Xunit.Abstractions;
 namespace CircuitBreakingTests;
 
 [Collection("circuit_breaker")]
-public abstract class CircuitBreakerIntegrationContext : IDisposable, IObserver<IWolverineEvent>
+public abstract class CircuitBreakerIntegrationContext : IAsyncDisposable, IObserver<IWolverineEvent>
 {
     private readonly IHost _host;
+    private readonly Recorder _recorder;
     private readonly ITestOutputHelper _output;
-    private readonly Random _random = new();
 
-    private readonly List<ListenerState> _recordedStates = new();
+    private readonly List<ListenerState> _recordedStates = [];
     private readonly WolverineRuntime _runtime;
-    private readonly List<Task> _tasks = new();
+    private readonly List<Task> _tasks = [];
 
     public CircuitBreakerIntegrationContext(ITestOutputHelper output)
     {
@@ -33,15 +33,18 @@ public abstract class CircuitBreakerIntegrationContext : IDisposable, IObserver<
             {
                 services.AddSingleton(output);
                 services.AddSingleton(typeof(ILogger<>), typeof(OutputLogger<>));
+                services.AddSingleton<Recorder>();
             })
             .Start();
 
+        _recorder = _host.Services.GetRequiredService<Recorder>();
         _runtime = _host.Services.GetRequiredService<IWolverineRuntime>().As<WolverineRuntime>();
         _runtime.Tracker.Subscribe(this);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        await _host.StopAsync();
         _host.Dispose();
     }
 
@@ -57,7 +60,7 @@ public abstract class CircuitBreakerIntegrationContext : IDisposable, IObserver<
     {
         if (value is ListenerState state)
         {
-            _output.WriteLine($"Got status update {state.Status} with {Recorder.Received} processed");
+            _output.WriteLine($"Got status update {state.Status} with {_recorder.Received} processed");
             _recordedStates.Add(state);
         }
     }
@@ -138,7 +141,7 @@ public abstract class CircuitBreakerIntegrationContext : IDisposable, IObserver<
     [Fact]
     public async Task everything_is_wonderful_even_though_there_are_some_failures_so_do_not_ever_trip()
     {
-        var messageWaiter = Recorder.WaitForMessagesToBeProcessed(_output, 1200, 2.Minutes());
+        var messageWaiter = _recorder.WaitForMessagesToBeProcessed(_output, 1200, 2.Minutes());
 
         publishHundredMessagesNow(5);
         publishHundredMessagesNow(5);
@@ -163,7 +166,7 @@ public abstract class CircuitBreakerIntegrationContext : IDisposable, IObserver<
     [Fact]
     public async Task the_circuit_breaker_should_trip_and_restart()
     {
-        var messageWaiter = Recorder.WaitForMessagesToBeProcessed(_output, 1200, 1.Minutes());
+        var messageWaiter = _recorder.WaitForMessagesToBeProcessed(_output, 1200, 1.Minutes());
 
         publishHundredMessagesNow(10);
         publishHundredMessagesNow(80);
@@ -174,7 +177,7 @@ public abstract class CircuitBreakerIntegrationContext : IDisposable, IObserver<
         var _ = Task.Run(async () =>
         {
             await Task.Delay(10.Seconds());
-            Recorder.NeverFail = true;
+            _recorder.NeverFail = true;
         });
 
         delayPublishHundredMessages(5.Seconds(), 5);

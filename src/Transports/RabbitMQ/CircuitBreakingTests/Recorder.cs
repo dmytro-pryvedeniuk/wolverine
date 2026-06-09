@@ -2,15 +2,15 @@ using Xunit.Abstractions;
 
 namespace CircuitBreakingTests;
 
-public static class Recorder
+public class Recorder
 {
-    public static int Received;
-    private static TaskCompletionSource<int> _completion = null!;
-    private static int _expected;
-    private static ITestOutputHelper _output = null!;
-    public static bool NeverFail { get; set; }
+    public int Received;
+    private TaskCompletionSource<int> _completion = null!;
+    private int _expected;
+    private ITestOutputHelper _output = null!;
+    public bool NeverFail { get; set; }
 
-    public static Task WaitForMessagesToBeProcessed(ITestOutputHelper output, int number, TimeSpan timeout)
+    public Task WaitForMessagesToBeProcessed(ITestOutputHelper output, int number, TimeSpan timeout)
     {
         NeverFail = false;
         _output = output;
@@ -28,7 +28,7 @@ public static class Recorder
         return _completion.Task;
     }
 
-    public static void Increment()
+    public void Increment()
     {
         Interlocked.Increment(ref Received);
 
@@ -39,7 +39,7 @@ public static class Recorder
 
         if (Received >= _expected)
         {
-            _completion.SetResult(Received);
+            _completion.TrySetResult(Received);
         }
     }
 }

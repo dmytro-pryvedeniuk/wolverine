@@ -32,13 +32,14 @@ public class back_pressure_tripping_off
                     // Setting it so that the endpoint should trip off with back
                     // pressure pretty easily
                     .BufferedInMemory(new BufferingLimits(100, 50));
+                opts.Services.AddSingleton<Recorder>();
             })
 
             // This builds any missing Rabbit MQ objects if they don't exist,
             // but purges existing queues so we start from a clean slate
             .UseResourceSetupOnStartup(StartupAction.ResetState)
             .StartAsync();
-
+        var recorder = host.Services.GetRequiredService<Recorder>();
         // Make the tests run slow so they'll back up very easily
         SometimesSlowMessageHandler.RunSlow = true;
 
@@ -49,7 +50,7 @@ public class back_pressure_tripping_off
         var waitForTooBusy =
             runtime.Tracker.WaitForListenerStatusAsync("incoming", ListeningStatus.TooBusy, 1.Minutes());
 
-        var completion = Recorder.WaitForMessagesToBeProcessed(_output, 1000, 1.Minutes());
+        var completion = recorder.WaitForMessagesToBeProcessed(_output, 1000, 1.Minutes());
 
         var publishing = Task.Run(async () =>
         {
@@ -114,13 +115,13 @@ public class SometimesSlowMessageHandler
 {
     public static bool RunSlow;
 
-    public static async Task Handle(SometimesSlowMessage message)
+    public static async Task Handle(SometimesSlowMessage message, Recorder recorder)
     {
         if (RunSlow)
         {
             await Task.Delay(2.Seconds());
         }
 
-        Recorder.Increment();
+        recorder.Increment();
     }
 }
