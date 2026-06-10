@@ -14,12 +14,14 @@ public class buffered_not_parallelized : CircuitBreakerIntegrationContext
 
     protected override void configureListener(WolverineOptions opts)
     {
+        var queueName = Guid.NewGuid().ToString("N");
+
         // Requeue failed messages.
         opts.Policies.OnException<BadImageFormatException>().Or<DivideByZeroException>()
             .Requeue();
 
-        opts.PublishAllMessages().ToRabbitQueue("circuit2");
-        opts.ListenToRabbitQueue("circuit2").CircuitBreaker(cb =>
+        opts.PublishAllMessages().ToRabbitQueue(queueName);
+        opts.ListenToRabbitQueue(queueName).CircuitBreaker(cb =>
         {
             cb.MinimumThreshold = 250;
             cb.PauseTime = 10.Seconds();

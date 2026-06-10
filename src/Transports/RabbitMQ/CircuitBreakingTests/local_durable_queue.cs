@@ -18,22 +18,26 @@ public class local_durable_queue : CircuitBreakerIntegrationContext
 
     protected override void configureListener(WolverineOptions opts)
     {
-        opts.PublishAllMessages().ToLocalQueue("durable").UseDurableInbox(new BufferingLimits(5000, 1))
+        var queueName = Guid.NewGuid().ToString("N");
+        var schemaName = $"_{Guid.NewGuid():N}";
+
+        opts.PublishAllMessages()
+            .ToLocalQueue(queueName)
+            .UseDurableInbox(new BufferingLimits(5000, 1))
             .CircuitBreaker(cb =>
             {
                 cb.MinimumThreshold = 250;
                 cb.PauseTime = 10.Seconds();
                 cb.TrackingPeriod = 1.Minutes();
                 cb.FailurePercentageThreshold = 20;
-            })
-            ;
+            });
 
         opts.Policies.OnAnyException().Requeue();
 
         opts.Services.AddMarten(opts =>
         {
             opts.Connection(Servers.PostgresConnectionString);
-            opts.DatabaseSchemaName = "circuit_breaker";
+            opts.DatabaseSchemaName = schemaName;
         }).IntegrateWithWolverine().ApplyAllDatabaseChangesOnStartup();
 
         opts.Services.AddResourceSetupOnStartup();

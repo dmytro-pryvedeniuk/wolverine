@@ -17,18 +17,22 @@ public class durable_and_not_parallel : CircuitBreakerIntegrationContext
 
     protected override void configureListener(WolverineOptions opts)
     {
+        var queueName = Guid.NewGuid().ToString("N");
+        var schemaName = queueName;
+
         opts.Services.AddMarten(m =>
         {
             m.Connection(Servers.PostgresConnectionString);
-            m.DatabaseSchemaName = "circuit_breaker";
+            m.DatabaseSchemaName = schemaName;
         }).IntegrateWithWolverine();
 
         // Requeue failed messages.
-        opts.Policies.OnException<BadImageFormatException>().Or<DivideByZeroException>()
+        opts.Policies.OnException<BadImageFormatException>()
+            .Or<DivideByZeroException>()
             .Requeue();
 
-        opts.PublishAllMessages().ToRabbitQueue("circuit4");
-        opts.ListenToRabbitQueue("circuit4").CircuitBreaker(cb =>
+        opts.PublishAllMessages().ToRabbitQueue(queueName);
+        opts.ListenToRabbitQueue(queueName).CircuitBreaker(cb =>
         {
             cb.MinimumThreshold = 250;
             cb.PauseTime = 10.Seconds();

@@ -31,7 +31,10 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
     {
         _monitor.Remove(this);
         await teardownChannel();
-        Locker.Dispose();
+        // Don't dispose Locker -- the GC handles this small managed object,
+        // and disposing it forces every concurrent WaitAsync/Release call
+        // to catch ObjectDisposedException when the sender is shared across
+        // listener pause/restart cycles.
     }
 
     internal async Task EnsureInitiated()

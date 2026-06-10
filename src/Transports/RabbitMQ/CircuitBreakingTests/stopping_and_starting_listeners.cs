@@ -18,7 +18,7 @@ using Wolverine.Util;
 
 namespace CircuitBreakingTests;
 
-public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
+public class stopping_and_starting_listeners : IAsyncLifetime
 {
     private int _port1;
     private int _port2;
@@ -52,12 +52,12 @@ public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
         });
     }
 
-    Task IAsyncLifetime.DisposeAsync() => Task.CompletedTask;
-
-    public void Dispose()
+    public async Task DisposeAsync() 
     {
-        theListener?.Dispose();
+        await theListener.StopAsync();
+        theListener.Dispose();
     }
+   
 
     [Fact]
     public async Task pause_a_local_durable_queue()
