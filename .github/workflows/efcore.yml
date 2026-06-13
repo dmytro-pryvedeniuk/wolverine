@@ -72,6 +72,13 @@ jobs:
           # Move converted XMLs into junit-results for consistency
           find . -type f -name "*.xml" -exec mv {} junit-results/ \;
 
+      # Inline reporting (per run)
+      - name: Report test results
+        uses: timkrins/github-actions-test-reporter-ctrf@v1
+        with:
+          report-files: "junit-results/*.xml"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Append results with deduplication and retention
         run: |
           python .github/scripts/append_test_results.py \
