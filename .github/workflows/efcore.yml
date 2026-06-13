@@ -40,6 +40,48 @@ jobs:
       - name: Run EF Core Tests
         run: ./build.sh CIEfCore --framework net9.0
 
+      - name: Upload TRX results
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+
       - name: Stop containers
         if: always()
         run: docker compose down
+
+  report:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v8
+
+      - name: Download TRX results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+
+      - name: Install trx2junit converter
+        run: dotnet tool install --global trx2junit
+
+      - name: Convert all TRX → JUnit XML
+        run: |
+          mkdir -p junit-results
+          # Find all .trx files under any TestResults folder and convert them
+          find . -type f -path "*/TestResults/*.trx" -exec trx2junit {} \;
+          # Move converted XMLs into junit-results for consistency
+          find . -type f -name "*.xml" -exec mv {} junit-results/ \;
+
+      - name: Append results with deduplication & retention
+        run: |
+          bash scripts/append_results.sh junit-results/*.xml ./dashboard/results.json $GITHUB_RUN_ID $GITHUB_REF_NAME 50
+
+      - name: Generate dashboard
+        run: |
+          python scripts/report.py ./dashboard/results.json --output ./dashboard
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dashboard
