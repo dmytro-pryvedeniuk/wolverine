@@ -54,7 +54,8 @@ def main():
     # Trim to last N runs
     data = sorted(data, key=lambda r: r["timestamp"], reverse=True)[:args.limit]
 
-    # Save back
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    
     with open(args.output, "w") as f:
         json.dump(data, f, indent=2)
 
