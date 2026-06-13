@@ -64,7 +64,7 @@ jobs:
       - name: Install trx2junit converter
         run: dotnet tool install --global trx2junit
 
-      - name: Convert all TRX → JUnit XML
+      - name: Convert all TRX to JUnit XML
         run: |
           mkdir -p junit-results
           # Find all .trx files under any TestResults folder and convert them
@@ -72,9 +72,14 @@ jobs:
           # Move converted XMLs into junit-results for consistency
           find . -type f -name "*.xml" -exec mv {} junit-results/ \;
 
-      - name: Append results with deduplication & retention
+      - name: Append results with deduplication and retention
         run: |
-          bash scripts/append_results.sh junit-results/*.xml ./dashboard/results.json $GITHUB_RUN_ID $GITHUB_REF_NAME 50
+          python .github/scripts/append_test_results.py \
+            --input junit-results/*.xml \
+            --output ./dashboard/results.json \
+            --branch $GITHUB_REF_NAME \
+            --run $GITHUB_RUN_ID \
+            --limit 50
 
       - name: Generate dashboard
         run: |
