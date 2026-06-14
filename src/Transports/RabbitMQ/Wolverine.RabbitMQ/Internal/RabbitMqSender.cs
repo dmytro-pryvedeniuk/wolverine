@@ -67,10 +67,6 @@ internal class RabbitMqSender : RabbitMqChannelAgent, ISender
     public async ValueTask SendAsync(Envelope envelope)
     {
         await EnsureInitiated();
-        if (Channel == null)
-        {
-            throw new InvalidOperationException("Channel has not been started for this sender");
-        }
 
         if (State == AgentState.Disconnected)
         {
@@ -88,7 +84,11 @@ internal class RabbitMqSender : RabbitMqChannelAgent, ISender
         _mapper.MapEnvelopeToOutgoing(envelope, props);
 
         var routingKey = await ToRoutingKeyAsync(envelope);
-        await Channel.BasicPublishAsync(_exchangeName, routingKey, false, props, envelope.Data);
+        if (!await RunOnChannelAsync((ch, ct) =>
+                ch.BasicPublishAsync(_exchangeName, routingKey, false, props, envelope.Data)))
+        {
+            throw new InvalidOperationException("Channel is not available for sending");
+        }
     }
 
     public override string ToString()

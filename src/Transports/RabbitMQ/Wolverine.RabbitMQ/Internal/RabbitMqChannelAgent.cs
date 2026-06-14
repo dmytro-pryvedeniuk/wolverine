@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RabbitMQ.Client.Exceptions;
 
 namespace Wolverine.RabbitMQ.Internal;
 
@@ -10,10 +11,12 @@ namespace Wolverine.RabbitMQ.Internal;
 internal abstract class RabbitMqChannelAgent : IAsyncDisposable
 {
     private readonly ConnectionMonitor _monitor;
-    protected readonly SemaphoreSlim Locker = new(1, 1);
+    private readonly CancellationTokenSource _disposeCts = new();
+    private readonly SemaphoreSlim _locker = new(1, 1);
+    private IChannel? _channel;
+    private bool _disposed;
 
-    protected RabbitMqChannelAgent(ConnectionMonitor monitor,
-        ILogger logger)
+    protected RabbitMqChannelAgent(ConnectionMonitor monitor, ILogger logger)
     {
         _monitor = monitor;
         Logger = logger;
@@ -25,32 +28,68 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
     internal AgentState State { get; private set; } = AgentState.Disconnected;
     internal bool IsConnected => State == AgentState.Connected;
 
-    internal IChannel? Channel { get; set; }
+    /// <summary>
+    /// Execute an action on the current channel if one is available.
+    /// </summary>
+    internal async Task<bool> RunOnChannelAsync(
+        Func<IChannel, CancellationToken, ValueTask> action,
+        CancellationToken ct = default)
+    {
+        var channel = _channel;
+        if (channel is null)
+            return false;
+
+        try
+        {
+            await action(channel, ct);
+            return true;
+        }
+        catch (AlreadyClosedException)
+        {
+            // Channel was closed concurrently - broker handles redelivery
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            // Channel was disposed concurrently
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            // Agent is shutting down
+            return false;
+        }
+    }
 
     public virtual async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
+
+        // Signal the error-recovery callback to bail out before we tear down.
+        await _disposeCts.CancelAsync();
+
         _monitor.Remove(this);
         await teardownChannel();
-        Locker.Dispose();
+
+        _disposeCts.Dispose();
+        _locker.Dispose();
     }
 
     internal async Task EnsureInitiated()
     {
-        if (Channel is not null)
-        {
+        if (_disposed) return;
+        if (_channel is not null)
             return;
-        }
 
-        await Locker.WaitAsync();
-        
-        if (Channel is not null)
-        {
-            Locker.Release();
+        if (!await TryToWaitAsync(_locker, _disposeCts.Token))
             return;
-        }
 
         try
         {
+            if (_channel is not null)
+                return;
+
             await startNewChannel();
             State = AgentState.Connected;
         }
@@ -60,55 +99,22 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
         }
         finally
         {
-            Locker.Release();
+            TryToUnlock(_locker);
         }
     }
 
     protected async Task startNewChannel()
     {
-        Channel = await _monitor.CreateChannelAsync();
+        var channel = await _monitor.CreateChannelAsync();
+        _channel = channel;
 
-        Channel.CallbackExceptionAsync += (sender, args) =>
-        {
-            Logger.LogError(args.Exception, "Callback error in Rabbit Mq agent. Attempting to restart the channel");
-
-            // Try to restart the connection
-#pragma warning disable VSTHRD110
-            Task.Run(async () =>
-#pragma warning restore VSTHRD110
-            {
-                await Locker.WaitAsync();
-                try
-                {
-                    _monitor.Remove(this);
-                    try
-                    {
-                        await teardownChannel();
-                    }
-                    catch (Exception e)
-                    {
-                        Logger.LogError(e, "Error when trying to tear down a blocked channel");
-                    }
-
-                    Channel = null;
-                    await EnsureInitiated();
-                    Logger.LogInformation("Restarted the Rabbit MQ channel");
-                }
-                finally
-                {
-                    Locker.Release();
-                }
-            });
-            
-            return Task.CompletedTask;
-        };
-
-        Channel.ChannelShutdownAsync += ChannelOnModelShutdown;
+        channel.CallbackExceptionAsync += HandleChannelExceptionAsync;
+        channel.ChannelShutdownAsync += HandleChannelShutdownAsync;
 
         Logger.LogInformation("Opened a new channel for Wolverine endpoint {Endpoint}", this);
     }
 
-    private Task ChannelOnModelShutdown(object? sender, ShutdownEventArgs e)
+    private Task HandleChannelShutdownAsync(object? sender, ShutdownEventArgs e)
     {
         State = AgentState.Disconnected;
 
@@ -131,16 +137,68 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
 
     protected async Task teardownChannel()
     {
-        if (Channel != null)
+        var channel = _channel;
+        if (channel != null)
         {
-            Channel.ChannelShutdownAsync -= ChannelOnModelShutdown;
-            await Channel.CloseAsync();
-            await Channel.AbortAsync();
-            Channel.Dispose();
+            channel.CallbackExceptionAsync -= HandleChannelExceptionAsync;
+            channel.ChannelShutdownAsync -= HandleChannelShutdownAsync;
+            await channel.CloseAsync();
+            await channel.AbortAsync();
+            channel.Dispose();
         }
 
-        Channel = null;
+        _channel = null;
 
         State = AgentState.Disconnected;
+    }
+
+    private async Task HandleChannelExceptionAsync(object? sender, CallbackExceptionEventArgs args)
+    {
+        Logger.LogError(args.Exception, "Callback error in Rabbit Mq agent. Attempting to restart the channel");
+
+        if (!await TryToWaitAsync(_locker, _disposeCts.Token))
+            return;
+
+        try
+        {
+            await teardownChannel();
+            await startNewChannel();
+            State = AgentState.Connected;
+            Logger.LogInformation("Restarted the Rabbit MQ channel");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error when trying to restart Rabbit MQ channel for {Endpoint}", this);
+        }
+        finally
+        {
+            TryToUnlock(_locker);
+        }
+    }
+
+    private static async Task<bool> TryToWaitAsync(
+        SemaphoreSlim locker, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+            return false;
+        try
+        {
+            await locker.WaitAsync(cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+
+        return false;
+    }
+
+    private static void TryToUnlock(SemaphoreSlim locker)
+    {
+        try
+        {
+            locker.Release();
+        }
+        catch (ObjectDisposedException) { }
     }
 }

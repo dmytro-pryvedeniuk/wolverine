@@ -99,13 +99,17 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
             return;
         }
 
-        var channel = Channel;
-        if (channel != null)
+        // Latch the consumer BEFORE sending BasicCancel so that any in-flight
+        // AMQP deliveries that arrive after this point are reliably re-queued via
+        // the guard path (which always falls through to the sender connection).
+        // Without this, a late delivery could enter the normal path and be posted
+        // to a completed BufferedReceiver._receivingBlock, where it's silently dropped.
+        consumer.Dispose();
+        _consumer = null;
+
+        foreach (var consumerTag in consumer.ConsumerTags)
         {
-            foreach (var consumerTag in consumer.ConsumerTags)
-            {
-                await channel.BasicCancelAsync(consumerTag, true, default);
-            }
+            await RunOnChannelAsync((ch, ct) => new ValueTask(ch.BasicCancelAsync(consumerTag, true, ct)));
         }
     }
 
@@ -116,10 +120,8 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         await base.DisposeAsync();
 
-        if (_sender.IsValueCreated && _sender.Value is IAsyncDisposable ad)
-        {
-            await ad.DisposeAsync();
-        }
+        // Don't dispose _sender.Value — it's a shared sender cached on
+        // RabbitMqQueue and reused across listener pause/restart cycles.
     }
 
     public async Task<bool> TryRequeueAsync(Envelope envelope)
@@ -179,39 +181,45 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     {
         await EnsureInitiated();
 
-        if (Queue.AutoDelete || _transport.AutoProvision)
-        {
-            await Queue.DeclareAsync(Channel!, Logger);
-
-            if (Queue.DeadLetterQueue != null && Queue.DeadLetterQueue.Mode != DeadLetterQueueMode.WolverineStorage)
+        if (!await RunOnChannelAsync(async (ch, ct) =>
             {
-                var dlq = _transport.Queues[Queue.DeadLetterQueue.QueueName];
-                await dlq.DeclareAsync(Channel!, Logger);
-            }
-        }
+                if (Queue.AutoDelete || _transport.AutoProvision)
+                {
+                    await Queue.DeclareAsync(ch, Logger);
 
-        try
+                    if (Queue.DeadLetterQueue != null && Queue.DeadLetterQueue.Mode != DeadLetterQueueMode.WolverineStorage)
+                    {
+                        var dlq = _transport.Queues[Queue.DeadLetterQueue.QueueName];
+                        await dlq.DeclareAsync(ch, Logger);
+                    }
+                }
+
+                try
+                {
+                    var result = await ch.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
+                    if (Queue.Role == EndpointRole.Application)
+                    {
+                        Logger.LogInformation("{Count} messages in queue {QueueName} at listening start up time",
+                            result.MessageCount, Queue.QueueName);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.LogError(e, "Unable to check the queued count for {QueueName}", Queue.QueueName);
+                }
+
+                var mapper = Queue.BuildMapper(_runtime);
+
+                _consumer = new WorkerQueueMessageConsumer(ch, _receiver, Logger, this, mapper, Address, _cancellation);
+
+                await ch.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
+                await ch.BasicConsumeAsync(Queue.QueueName, false,
+                    _transport.ConnectionFactory?.ClientProvidedName ?? _runtime.Options.ServiceName, Queue.ConsumerArguments, _consumer,
+                    _runtime.Cancellation);
+            }))
         {
-            var result = await Channel!.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
-            if (Queue.Role == EndpointRole.Application)
-            {
-                Logger.LogInformation("{Count} messages in queue {QueueName} at listening start up time",
-                    result.MessageCount, Queue.QueueName);
-            }
+            throw new InvalidOperationException($"Cannot start listener {Address} — channel not available");
         }
-        catch (Exception e)
-        {
-            Logger.LogError(e, "Unable to check the queued count for {QueueName}", Queue.QueueName);
-        }
-
-        var mapper = Queue.BuildMapper(_runtime);
-
-        _consumer = new WorkerQueueMessageConsumer(Channel!, _receiver, Logger, this, mapper, Address, _cancellation);
-
-        await Channel!.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
-        await Channel.BasicConsumeAsync(Queue.QueueName, false,
-            _transport.ConnectionFactory?.ClientProvidedName ?? _runtime.Options.ServiceName, Queue.ConsumerArguments, _consumer,
-            _runtime.Cancellation);
 
         if (_transport.AutoPingListeners)
         {
@@ -237,16 +245,33 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
     public async ValueTask RequeueAsync(RabbitMqEnvelope envelope)
     {
+        // Used by the normal Defer/requeue path (RequeueContinuation).
+        // NACK the original delivery (best-effort) then publish a fresh copy via sender.
+        // If the NACK succeeds but the send fails, the message is lost - but the normal
+        // path runs on a healthy channel, so this failure is extremely unlikely.
         if (!envelope.Acknowledged)
         {
-            await Channel!.BasicNackAsync(envelope.DeliveryTag, false, false, _cancellation);
+            await RunOnChannelAsync((ch, ct) =>
+                ch.BasicNackAsync(envelope.DeliveryTag, false, false, ct));
         }
 
         await _sender.Value.SendAsync(envelope);
     }
 
+    /// <summary>
+    /// Publish a fresh copy via the sender connection WITHOUT NACK'ing the original.
+    /// Used when the listener channel is dying and NACK frames may be silently dropped.
+    /// The original un-acked delivery will be auto-requeued by RMQ when the
+    /// consumer channel fully closes.
+    /// </summary>
+    public async ValueTask RequeueViaSenderAsync(RabbitMqEnvelope envelope)
+    {
+        await _sender.Value.SendAsync(envelope);
+    }
+
     public async Task CompleteAsync(ulong deliveryTag)
     {
-        await Channel!.BasicAckAsync(deliveryTag, true, _cancellation);
+        await RunOnChannelAsync((ch, ct) =>
+            ch.BasicAckAsync(deliveryTag, true, ct));
     }
 }
