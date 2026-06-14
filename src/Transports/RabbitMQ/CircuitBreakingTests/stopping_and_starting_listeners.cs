@@ -18,7 +18,7 @@ using Wolverine.Util;
 
 namespace CircuitBreakingTests;
 
-public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
+public class stopping_and_starting_listeners : IAsyncLifetime
 {
     private int _port1;
     private int _port2;
@@ -31,33 +31,35 @@ public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
         _port2 = PortFinder.GetAvailablePort();
         _port3 = PortFinder.GetAvailablePort();
 
-        theListener = await WolverineHost.ForAsync(opts =>
-        {
-            opts.Durability.Mode = DurabilityMode.Solo;
+        theListener = await Host.CreateDefaultBuilder()
+            .UseWolverine(opts =>
+            {
+                opts.Durability.Mode = DurabilityMode.Solo;
 
-            opts.Services.AddMarten(Servers.PostgresConnectionString)
-                .IntegrateWithWolverine();
+                opts.Services.AddMarten(Servers.PostgresConnectionString)
+                    .IntegrateWithWolverine();
 
-            opts.Services.AddResourceSetupOnStartup();
+                opts.Services.AddResourceSetupOnStartup();
 
-            opts.ListenAtPort(_port1).Named("one");
-            opts.ListenAtPort(_port2).Named("two");
-            opts.ListenAtPort(_port3).Named("three");
+                opts.ListenAtPort(_port1).Named("one");
+                opts.ListenAtPort(_port2).Named("two");
+                opts.ListenAtPort(_port3).Named("three");
 
-            opts.PublishMessage<Message1>().ToLocalQueue("one").UseDurableInbox().Named("local");
-            opts.PublishMessage<CanCauseErrorMessage>().ToLocalQueue("one").UseDurableInbox();
+                opts.PublishMessage<Message1>().ToLocalQueue("one").UseDurableInbox().Named("local");
+                opts.PublishMessage<CanCauseErrorMessage>().ToLocalQueue("one").UseDurableInbox();
 
-            opts.Policies.OnException<DivideByZeroException>()
-                .Requeue().AndPauseProcessing(5.Seconds());
-        });
+                opts.Policies.OnException<DivideByZeroException>()
+                    .Requeue().AndPauseProcessing(5.Seconds());
+            }).StartAsync();
     }
 
-    Task IAsyncLifetime.DisposeAsync() => Task.CompletedTask;
-
-    public void Dispose()
+    public async Task DisposeAsync() 
     {
-        theListener?.Dispose();
+        await theListener.TeardownResources();
+        await theListener.StopAsync();
+        theListener.Dispose();
     }
+   
 
     [Fact]
     public async Task pause_a_local_durable_queue()
@@ -128,19 +130,7 @@ public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
 
         agent.Status.ShouldBe(ListeningStatus.Stopped);
 
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
-
-        while (stopwatch.Elapsed < 10.Seconds())
-        {
-            if (agent.Status == ListeningStatus.Accepting)
-            {
-                stopwatch.Stop();
-                return;
-            }
-        }
-
-        agent.Status.ShouldBe(ListeningStatus.Accepting);
+        await AssertAcceptingStatusWithDelay(agent);
     }
 
     [Fact]
@@ -153,29 +143,18 @@ public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
 
         agent.Status.ShouldBe(ListeningStatus.Stopped);
 
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
-
-        while (stopwatch.Elapsed < 10.Seconds())
-        {
-            if (agent.Status == ListeningStatus.Accepting)
-            {
-                stopwatch.Stop();
-                return;
-            }
-        }
-
-        agent.Status.ShouldBe(ListeningStatus.Accepting);
+        await AssertAcceptingStatusWithDelay(agent);
     }
 
     [Fact]
     public async Task pause_listener_on_matching_error_condition()
     {
-        using var sender = await WolverineHost.ForAsync(opts =>
-        {
-            opts.Durability.Mode = DurabilityMode.Solo;
-            opts.PublishAllMessages().ToPort(_port1).Named("one");
-        });
+        using var sender = await Host.CreateDefaultBuilder()
+            .UseWolverine(opts =>
+            {
+                opts.Durability.Mode = DurabilityMode.Solo;
+                opts.PublishAllMessages().ToPort(_port1).Named("one");
+            }).StartAsync();
 
         var runtime = theListener.GetRuntime();
 
@@ -193,20 +172,7 @@ public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
         var agent = runtime.Endpoints.FindListeningAgent("one")!;
         agent.Status.ShouldBe(ListeningStatus.Stopped);
 
-        // should restart
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
-
-        while (stopwatch.Elapsed < 10.Seconds())
-        {
-            if (agent.Status == ListeningStatus.Accepting)
-            {
-                stopwatch.Stop();
-                return;
-            }
-        }
-
-        agent.Status.ShouldBe(ListeningStatus.Accepting);
+        await AssertAcceptingStatusWithDelay(agent);
     }
 
     [Fact]
@@ -217,29 +183,37 @@ public class stopping_and_starting_listeners : IAsyncLifetime, IDisposable
         var stopWaiter =
             runtime.Tracker.WaitForListenerStatusAsync("one", ListeningStatus.Stopped, 1.Minutes());
 
-        await theListener
+        var session = await theListener
             .TrackActivity()
             .AlsoTrack(theListener)
             .DoNotAssertOnExceptionsDetected()
-            .SendMessageAndWaitAsync(new CanCauseErrorMessage{Throw = true});
+            .SendMessageAndWaitAsync(new CanCauseErrorMessage { Throw = true });
 
         await stopWaiter;
 
         var agent = (IListenerCircuit)runtime.Endpoints.AgentForLocalQueue("one");
         agent.Status.ShouldBe(ListeningStatus.TooBusy);
 
-        CanCauseErrorMessageHandler.Handled.ShouldBe(1);
+        session.Executed.MessagesOf<CanCauseErrorMessage>().Count().ShouldBe(1);
 
-        // should restart
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
+        await AssertAcceptingStatusWithDelay(agent);
+    }
 
-        while (stopwatch.Elapsed < 10.Seconds())
+    private static async Task AssertAcceptingStatusWithDelay(IListenerCircuit agent)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (!cts.IsCancellationRequested)
         {
             if (agent.Status == ListeningStatus.Accepting)
+                break;
+
+            try
             {
-                stopwatch.Stop();
-                return;
+                await Task.Delay(25, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
         }
 
@@ -254,16 +228,10 @@ public class CanCauseErrorMessage
 
 public static class CanCauseErrorMessageHandler
 {
-    public static int Handled = 0;
-
     public static void Handle(CanCauseErrorMessage message, Envelope envelope)
     {
-        Handled++;
-
         if (envelope.Attempts <= 1)
-        {
             throw new DivideByZeroException();
-        }
     }
 }
 
@@ -274,8 +242,6 @@ public class PausingMessageHandler
     public static void Handle(PausingMessage message, Envelope envelope)
     {
         if (envelope.Attempts <= 1)
-        {
             throw new DivideByZeroException("boom");
-        }
     }
 }
