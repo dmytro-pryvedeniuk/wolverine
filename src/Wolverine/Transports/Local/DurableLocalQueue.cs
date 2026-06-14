@@ -122,6 +122,15 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
         _restarter = new Restarter(this, pauseTime);
     }
 
+    public async ValueTask PauseWithDrainAsync(TimeSpan pauseTime)
+    {
+        // DurableLocalQueue.PauseAsync already fully drains. The behavioral split
+        // between PauseAsync and PauseWithDrainAsync is important for BufferedReceiver
+        // (which skips the drain in PauseAsync to avoid deadlocking when called from
+        // within the handler pipeline). For the durable local queue, both are identical.
+        await PauseAsync(pauseTime);
+    }
+
     public ValueTask StartAsync()
     {
         _receiver = new DurableReceiver(Endpoint, _runtime, Pipeline);
@@ -159,9 +168,13 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
 
     async ValueTask IReceiver.DrainAsync()
     {
-        _receiver!.Latch();
+        var receiver = _receiver;
+        receiver?.Latch();
+
         await _storeAndEnqueue.DrainAsync();
-        await _receiver!.DrainAsync();
+
+        if (receiver != null)
+            await receiver.DrainAsync();
     }
 
     void ILocalReceiver.Enqueue(Envelope envelope)
@@ -246,7 +259,17 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
     {
         try
         {
-            envelope.OwnerId = _settings.AssignedNodeNumber;
+            // If the circuit breaker has latched this queue, persist the
+            // message with OwnerId = AnyNode so the durability agent can
+            // recover it later. Messages that were posted to the RetryBlock
+            // before the latch (but processed after) arrive with
+            // AssignedNodeNumber — if we don't correct that, they're stuck:
+            // owned by a running node but never enqueued to the (now-null)
+            // receiver, and invisible to the recovery agent.
+            envelope.OwnerId = Latched
+                ? TransportConstants.AnyNode
+                : _settings.AssignedNodeNumber;
+
             assignAncillaryStoreIfNeeded(envelope);
             await _inbox.StoreIncomingAsync(envelope);
             envelope.WasPersistedInInbox = true;
