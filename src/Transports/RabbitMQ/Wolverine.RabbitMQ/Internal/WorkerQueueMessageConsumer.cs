@@ -12,7 +12,7 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
     private readonly ILogger _logger;
     private readonly IRabbitMqEnvelopeMapper _mapper;
     private readonly IReceiver _workerQueue;
-    private bool _latched;
+    private volatile bool _latched;
 
     public WorkerQueueMessageConsumer(IChannel channel, IReceiver workerQueue, ILogger logger,
         RabbitMqListener listener,
@@ -36,62 +36,46 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
         string routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body,
         CancellationToken cancellationToken = new())
     {
-        if (_latched || _cancellation.IsCancellationRequested || !_listener.IsConnected)
+        if (IsListenerChannelNotReady())
         {
-            await _listener.Channel!.BasicRejectAsync(deliveryTag, true, _cancellation);
+            // Listener channel may not be ready — BasicNack frames may be silently dropped.
+            // Try NACK first; fall back to sender connection if NACK fails.
+            try
+            {
+                var guardEnvelope = MapIncomingToEnvelope(deliveryTag, properties, body);
+                await NackOrRequeueAsync(deliveryTag, guardEnvelope, requeue: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to requeue message (dt={DeliveryTag}) during guard", deliveryTag);
+            }
             return;
         }
 
-        var envelope = new RabbitMqEnvelope(_listener, deliveryTag);
-
+        RabbitMqEnvelope envelope;
         try
         {
-            envelope.Data = body.ToArray();
-            _mapper.MapIncomingToEnvelope(envelope, properties);
+            envelope = MapIncomingToEnvelope(deliveryTag, properties, body);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            _logger.LogError(e, "Error trying to map an incoming RabbitMQ message {MessageId} to an Envelope", properties.MessageId);
-
-            // MoveToErrorsAsync keys the envelope by Id; the mapper threw before
-            // setting one, so synthesize a Guid to satisfy the dead-letter store contract.
-            if (envelope.Id == Guid.Empty)
-            {
-                envelope.Id = Guid.NewGuid();
-            }
-
-            try
-            {
-                if (_workerQueue is ISupportDeadLetterQueue dlq)
-                {
-                    await dlq.MoveToErrorsAsync(envelope, e);
-                    return;
-                }
-            }
-            catch (Exception moveEx)
-            {
-                _logger.LogError(moveEx,
-                    "Failed to move un-mappable RabbitMQ message {MessageId} to the dead-letter store; falling back to broker DLX",
-                    properties.MessageId);
-            }
-
-            try
-            {
-                await Channel.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation);
-            }
-            catch (Exception nackEx)
-            {
-                _logger.LogError(nackEx,
-                    "Failed to Nack un-mappable RabbitMQ message {MessageId}",
-                    properties.MessageId);
-            }
-
+            await HandleUnmappableMessageAsync(ex, deliveryTag, properties, body);
             return;
         }
 
         if (envelope.IsPing())
         {
             await Channel.BasicAckAsync(deliveryTag, false, _cancellation);
+            return;
+        }
+
+        // TOCTOU guard: IsListenerChannelNotReady() may have become true between
+        // the first check and this point (e.g. during StopAsync's consumer.Dispose()).
+        // The receiver's Block may already be Complete'd — posting would silently
+        // drop the message.
+        if (IsListenerChannelNotReady())
+        {
+            await NackOrRequeueAsync(deliveryTag, envelope, requeue: true);
             return;
         }
 
@@ -102,13 +86,77 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
         catch (Exception e)
         {
             _logger.LogError(e, "Failure to receive an incoming message with {Id}, trying to 'Nack' the message", envelope.Id);
+            await NackOrRequeueAsync(deliveryTag, envelope, requeue: true);
+        }
+    }
+
+    private async Task HandleUnmappableMessageAsync(
+        Exception exception, ulong deliveryTag, 
+        IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body)
+    {
+        _logger.LogError(exception, "Error trying to map an incoming RabbitMQ message {MessageId} to an Envelope",
+            properties.MessageId);
+
+        var envelope = new RabbitMqEnvelope(_listener, deliveryTag)
+        {
+            Id = Guid.NewGuid(),
+            Data = body.ToArray()
+        };
+
+        try
+        {
+            if (_workerQueue is ISupportDeadLetterQueue dlq)
+            {
+                await dlq.MoveToErrorsAsync(envelope, exception);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to move un-mappable RabbitMQ message {MessageId} to the dead-letter store; " +
+                "falling back to broker DLX",
+                properties.MessageId);
+        }
+
+        await NackOrRequeueAsync(deliveryTag, envelope, requeue: false);
+    }
+
+    private RabbitMqEnvelope MapIncomingToEnvelope(
+        ulong deliveryTag, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body)
+    {
+        var envelope = new RabbitMqEnvelope(_listener, deliveryTag)
+        {
+            Data = body.ToArray()
+        };
+        _mapper.MapIncomingToEnvelope(envelope, properties);
+        return envelope;
+    }
+
+    private bool IsListenerChannelNotReady() =>
+        _latched || _cancellation.IsCancellationRequested || !_listener.IsConnected;
+
+    private async Task NackOrRequeueAsync(ulong deliveryTag, RabbitMqEnvelope envelope, bool requeue)
+    {
+        try
+        {
+            await Channel.BasicNackAsync(deliveryTag, multiple: false, requeue, _cancellation);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to Nack dt={DeliveryTag}", deliveryTag);
+
+            if (!requeue)
+                return;
+
             try
             {
-                await Channel.BasicNackAsync(deliveryTag, false, true, _cancellation);
+                await _listener.RequeueViaSenderAsync(envelope);
             }
-            catch (Exception ex)
+            catch (Exception requeueEx)
             {
-                _logger.LogError(ex, "Failure trying to Nack a previously failed message {Id}", envelope.Id);
+                _logger.LogError(requeueEx,
+                    "Failed to requeue envelope (dt={DeliveryTag}) via sender after failed NACK", deliveryTag);
             }
         }
     }
