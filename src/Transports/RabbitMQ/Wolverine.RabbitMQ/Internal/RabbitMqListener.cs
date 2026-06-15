@@ -183,39 +183,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         if (!await RunOnChannelAsync(async (ch, ct) =>
             {
-                if (Queue.AutoDelete || _transport.AutoProvision)
-                {
-                    await Queue.DeclareAsync(ch, Logger);
-
-                    if (Queue.DeadLetterQueue != null && Queue.DeadLetterQueue.Mode != DeadLetterQueueMode.WolverineStorage)
-                    {
-                        var dlq = _transport.Queues[Queue.DeadLetterQueue.QueueName];
-                        await dlq.DeclareAsync(ch, Logger);
-                    }
-                }
-
-                try
-                {
-                    var result = await ch.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
-                    if (Queue.Role == EndpointRole.Application)
-                    {
-                        Logger.LogInformation("{Count} messages in queue {QueueName} at listening start up time",
-                            result.MessageCount, Queue.QueueName);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Logger.LogError(e, "Unable to check the queued count for {QueueName}", Queue.QueueName);
-                }
-
-                var mapper = Queue.BuildMapper(_runtime);
-
-                _consumer = new WorkerQueueMessageConsumer(ch, _receiver, Logger, this, mapper, Address, _cancellation);
-
-                await ch.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
-                await ch.BasicConsumeAsync(Queue.QueueName, false,
-                    _transport.ConnectionFactory?.ClientProvidedName ?? _runtime.Options.ServiceName, Queue.ConsumerArguments, _consumer,
-                    _runtime.Cancellation);
+                await StartConsumingAsync(ch);
             }))
         {
             throw new InvalidOperationException($"Cannot start listener {Address} — channel not available");
@@ -227,6 +195,56 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
             var ping = Envelope.ForPing(Address);
             await _sender.Value.SendAsync(ping);
         }
+    }
+
+    /// <summary>
+    /// Register the consumer on the given channel. Shared between initial
+    /// startup (<see cref="CreateAsync"/>) and channel recovery
+    /// (<see cref="RecoverChannelAsync"/>).
+    /// </summary>
+    private async Task StartConsumingAsync(IChannel ch)
+    {
+        if (Queue.AutoDelete || _transport.AutoProvision)
+        {
+            await Queue.DeclareAsync(ch, Logger);
+
+            if (Queue.DeadLetterQueue != null && Queue.DeadLetterQueue.Mode != DeadLetterQueueMode.WolverineStorage)
+            {
+                var dlq = _transport.Queues[Queue.DeadLetterQueue.QueueName];
+                await dlq.DeclareAsync(ch, Logger);
+            }
+        }
+
+        try
+        {
+            var result = await ch.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
+            if (Queue.Role == EndpointRole.Application)
+            {
+                Logger.LogInformation("{Count} messages in queue {QueueName} at listening start up time",
+                    result.MessageCount, Queue.QueueName);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Unable to check the queued count for {QueueName}", Queue.QueueName);
+        }
+
+        var mapper = Queue.BuildMapper(_runtime);
+
+        _consumer = new WorkerQueueMessageConsumer(ch, _receiver, Logger, this, mapper, Address, _cancellation);
+
+        await ch.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
+        await ch.BasicConsumeAsync(Queue.QueueName, false,
+            _transport.ConnectionFactory?.ClientProvidedName ?? _runtime.Options.ServiceName, Queue.ConsumerArguments, _consumer,
+            _runtime.Cancellation);
+    }
+
+    protected override async Task RecoverChannelAsync()
+    {
+        await base.RecoverChannelAsync();
+
+        // Re-register the consumer on the new channel.
+        await RunOnChannelAsync((ch, ct) => new ValueTask(StartConsumingAsync(ch)));
     }
 
     internal override async Task ReconnectedAsync()

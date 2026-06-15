@@ -114,11 +114,11 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
         Logger.LogInformation("Opened a new channel for Wolverine endpoint {Endpoint}", this);
     }
 
-    private Task HandleChannelShutdownAsync(object? sender, ShutdownEventArgs e)
+    private async Task HandleChannelShutdownAsync(object? sender, ShutdownEventArgs e)
     {
         State = AgentState.Disconnected;
 
-        if (e.Initiator == ShutdownInitiator.Application) return Task.CompletedTask;
+        if (e.Initiator == ShutdownInitiator.Application) return;
 
         if (e.Exception != null)
         {
@@ -126,7 +126,7 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
                 "Unexpected channel shutdown for Rabbit MQ. Wolverine will attempt to restart...");
         }
 
-        return Task.CompletedTask;
+        await RecoverChannelAsync();
     }
 
     internal virtual Task ReconnectedAsync()
@@ -156,6 +156,16 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
     {
         Logger.LogError(args.Exception, "Callback error in Rabbit Mq agent. Attempting to restart the channel");
 
+        await RecoverChannelAsync();
+    }
+
+    /// <summary>
+    /// Recover from a channel failure: tear down the old channel and start a new one.
+    /// Subclasses (e.g. <see cref="RabbitMqListener"/>) can override to also
+    /// re-register any consumer or other per-channel state on the new channel.
+    /// </summary>
+    protected virtual async Task RecoverChannelAsync()
+    {
         if (!await TryToWaitAsync(_locker, _disposeCts.Token))
             return;
 
