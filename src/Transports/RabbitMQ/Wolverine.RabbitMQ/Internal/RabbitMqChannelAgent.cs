@@ -142,8 +142,15 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
         {
             channel.CallbackExceptionAsync -= HandleChannelExceptionAsync;
             channel.ChannelShutdownAsync -= HandleChannelShutdownAsync;
-            await channel.CloseAsync();
-            await channel.AbortAsync();
+            try
+            {
+                await channel.CloseAsync();
+                await channel.AbortAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                // Channel teardown was cancelled during shutdown race.
+            }
             channel.Dispose();
         }
 
