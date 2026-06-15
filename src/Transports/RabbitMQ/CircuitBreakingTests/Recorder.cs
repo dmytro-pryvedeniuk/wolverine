@@ -58,14 +58,14 @@ public class Recorder
         return _completion.Task;
     }
 
-    public void Increment(Guid messageId, int messageNumber = -1, int attempt = 0)
+    public void Increment(Guid messageId, int attempt = 0)
     {
         _processedIds.AddOrUpdate(messageId, 1, (_, existing) => existing + 1);
 
         var uniqueCount = _processedIds.Count;
 
-        if (messageNumber >= 0)
-            _output.WriteLine($"msg#{messageNumber} completed " +
+        var shortId = messageId.ToString()[..8];
+        _output.WriteLine($"msg#{shortId} completed " +
                 $"(attempt {attempt}, unique: {uniqueCount})");
 
         if (uniqueCount >= _expected)

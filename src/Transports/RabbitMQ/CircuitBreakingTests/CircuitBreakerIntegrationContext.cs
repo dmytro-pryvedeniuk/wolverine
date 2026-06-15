@@ -98,7 +98,8 @@ public abstract class CircuitBreakerIntegrationContext(ITestOutputHelper output)
         {
             var shouldFail = i > 0 && i % everyOther == 0;
 
-            var message = new SometimesFails(Guid.NewGuid(), i, shouldFail ? MessageResult.BadImage : MessageResult.Success,
+            var message = new SometimesFails(Guid.NewGuid(),
+                shouldFail ? MessageResult.BadImage : MessageResult.Success,
                 MessageResult.Success, MessageResult.Success);
 
             messages[i] = message;
@@ -217,7 +218,7 @@ public enum MessageResult
     BadImage
 }
 
-public record SometimesFails(Guid Id, int Number, MessageResult First, MessageResult Second, MessageResult Third);
+public record SometimesFails(Guid Id, MessageResult First, MessageResult Second, MessageResult Third);
 
 public class OutputLogger<T>(ITestOutputHelper output) : ILogger<T>, IDisposable
 {

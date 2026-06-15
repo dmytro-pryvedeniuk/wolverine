@@ -14,7 +14,7 @@ public class SometimesFailsHandler
             case MessageResult.DivideByZero:
                 throw new DivideByZeroException();
             default:
-                recorder.Increment(message.Id, message.Number, envelope.Attempts);
+                recorder.Increment(message.Id, envelope.Attempts);
                 break;
         }
     }
