@@ -97,6 +97,19 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
     {
         Latched = true;
 
+        // Drain the store-and-enqueue RetryBlock BEFORE draining the receiver.
+        // This ensures all messages queued in _storeAndEnqueue are processed
+        // while the receiver is still alive. After the drain, any remaining
+        // messages see Latched=true and persist with OwnerId=AnyNode.
+        try
+        {
+            await _storeAndEnqueue.DrainAsync();
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error trying to drain store-and-enqueue RetryBlock for {Uri}", Destination);
+        }
+
         if (_receiver != null)
         {
             try
@@ -259,13 +272,11 @@ internal class DurableLocalQueue : ISendingAgent, IListenerCircuit, ILocalQueue
     {
         try
         {
-            // If the circuit breaker has latched this queue, persist the
-            // message with OwnerId = AnyNode so the durability agent can
-            // recover it later. Messages that were posted to the RetryBlock
-            // before the latch (but processed after) arrive with
-            // AssignedNodeNumber — if we don't correct that, they're stuck:
-            // owned by a running node but never enqueued to the (now-null)
-            // receiver, and invisible to the recovery agent.
+            // Use AnyNode when latched so the durability agent can recover
+            // the message. Messages already in the RetryBlock queue when
+            // PauseAsync sets Latched=true arrive with AssignedNodeNumber;
+            // without correction they'd be owned by a running node but
+            // never enqueued, making them invisible to recovery.
             envelope.OwnerId = Latched
                 ? TransportConstants.AnyNode
                 : _settings.AssignedNodeNumber;
