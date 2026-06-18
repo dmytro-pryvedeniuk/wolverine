@@ -68,6 +68,34 @@ jobs:
             ./build.sh "$tgt" --framework net9.0
           fi
 
+      - name: Upload TRX artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.target }}
+          path: "**/TestResults/*.trx"
+          retention-days: 5
+
       - name: Stop containers
         if: always()
         run: docker compose down
+
+  report:
+    if: ${{ !cancelled() }}
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all TRX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+
+      - name: Publish combined report
+        uses: dorny/test-reporter@v3
+        with:
+          name: xUnit Tests
+          path: "**/*.trx"
+          reporter: dotnet-trx
+          list-suites: "failed"
+          list-tests: "failed"
