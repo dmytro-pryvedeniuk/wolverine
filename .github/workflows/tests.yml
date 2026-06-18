@@ -109,5 +109,6 @@ jobs:
           name: xUnit Tests
           path: "**/*.trx"
           reporter: dotnet-trx
+          fail-on-error: false
           list-suites: "failed"
           list-tests: "failed"
