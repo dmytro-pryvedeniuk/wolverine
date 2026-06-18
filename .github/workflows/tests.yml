@@ -39,9 +39,7 @@ jobs:
           - CIRedis
           - CISqlite
           - CISqlServer
-          - CICircuitBreaking/3
-          # Suffix /N to repeat a target N times, e.g.:
-          # - CIRabbitMQ/10
+          - CICircuitBreaking
 
     steps:
       - name: Checkout
@@ -54,61 +52,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Run ${{ matrix.target }} Tests
-        run: |
-          IFS='/' read -r tgt reps <<< "${{ matrix.target }}"
-          reps="${reps:-1}"
-          if [[ "$reps" -gt 1 ]]; then
-            for i in $(seq 1 "$reps"); do
-              echo "::group::Run $i of $reps for $tgt"
-              ./build.sh "$tgt" --framework net9.0
-              echo "::endgroup::"
-            done
-          else
-            ./build.sh "$tgt" --framework net9.0
-          fi
-
-      - name: Set artifact name
-        id: artifact
-        run: |
-          name="${{ matrix.target }}"
-          name="${name//\//-}"
-          echo "name=test-results-$name" >> "$GITHUB_OUTPUT"
-
-      - name: Upload TRX artifacts
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.artifact.outputs.name }}
-          path: "**/TestResults/*.trx"
-          retention-days: 5
+      - name: Run Tests
+        run: ./build.sh ${{ matrix.target }} --framework net9.0
 
       - name: Stop containers
         if: always()
         run: docker compose down
-
-  report:
-    if: ${{ !cancelled() }}
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-
-      - name: Download all TRX artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: test-results-*
-          merge-multiple: true
-
-      - name: Publish combined report
-        uses: dorny/test-reporter@v3
-        with:
-          name: xUnit Tests
-          path: "**/*.trx"
-          reporter: dotnet-trx
-          fail-on-error: false
-          list-suites: "failed"
-          list-tests: "failed"
