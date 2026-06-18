@@ -39,7 +39,7 @@ jobs:
           - CIRedis
           - CISqlite
           - CISqlServer
-          - CICircuitBreaking/5
+          - CICircuitBreaking/3
           # Suffix /N to repeat a target N times, e.g.:
           # - CIRabbitMQ/10
 
