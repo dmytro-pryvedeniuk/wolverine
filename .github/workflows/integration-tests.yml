@@ -1,0 +1,72 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  config: Release
+  disable_test_parallelization: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - CIAWS
+          - CIAzureServiceBus
+          - CICosmosDb
+          - CIEfCore
+          - CIGrpc
+          - CIKafka
+          - CIMarten
+          - CIMQTT
+          - CIMySql
+          - CINATS
+          - CIOracle
+          - CIPersistence
+          - CIPolecat
+          - CIPulsar
+          - CIRabbitMQ
+          - CIRavenDb
+          - CIRedis
+          - CISqlite
+          - CISqlServer
+          - CICircuitBreaking
+          # Suffix /N to repeat a target N times, e.g.:
+          # - CIRabbitMQ/10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run ${{ matrix.target }} Tests
+        run: |
+          IFS='/' read -r tgt reps <<< "${{ matrix.target }}"
+          reps="${reps:-1}"
+          if [[ "$reps" -gt 1 ]]; then
+            for i in $(seq 1 "$reps"); do
+              echo "::group::Run $i of $reps for $tgt"
+              ./build.sh "$tgt" --framework net9.0
+              echo "::endgroup::"
+            done
+          else
+            ./build.sh "$tgt" --framework net9.0
+          fi
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
