@@ -1,4 +1,4 @@
-name: Integration Tests
+name: tests
 
 on:
   push:
@@ -13,6 +13,7 @@ env:
 
 jobs:
   test:
+    name: ${{ matrix.target }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -38,7 +39,7 @@ jobs:
           - CIRedis
           - CISqlite
           - CISqlServer
-          - CICircuitBreaking
+          - CICircuitBreaking/5
           # Suffix /N to repeat a target N times, e.g.:
           # - CIRabbitMQ/10
 
