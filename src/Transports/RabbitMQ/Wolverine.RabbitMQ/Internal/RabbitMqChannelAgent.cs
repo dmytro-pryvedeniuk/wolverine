@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RabbitMQ.Client.Exceptions;
 
 namespace Wolverine.RabbitMQ.Internal;
 
@@ -11,7 +12,9 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
 {
     private readonly ConnectionMonitor _monitor;
     private readonly SemaphoreSlim Locker = new(1, 1);
-    private bool _disposed;
+    private volatile bool _disposed;
+    private volatile AgentState _state = AgentState.Disconnected;
+    private IChannel? _channel;
 
     protected RabbitMqChannelAgent(ConnectionMonitor monitor,
         ILogger logger)
@@ -23,10 +26,7 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
 
     public ILogger Logger { get; }
 
-    internal AgentState State { get; private set; } = AgentState.Disconnected;
-    internal bool IsConnected => State == AgentState.Connected;
-
-    internal IChannel? Channel { get; set; }
+    internal bool IsConnected => _state == AgentState.Connected;
 
     public virtual async ValueTask DisposeAsync()
     {
@@ -35,31 +35,42 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
         _disposed = true;
 
         _monitor.Remove(this);
-        await teardownChannel();
 
-        // Intentionally NOT calling Locker.Dispose() — rapid pause/restart cycles
-        // can have an in-flight WaitAsync/Release race with disposal, which would
-        // throw ObjectDisposedException. The kernel handle is reclaimed by the
-        // SemaphoreSlim finalizer. See #3132.
-    }
-
-    internal async Task EnsureInitiated()
-    {
-        if (Channel is not null)
-            return;
 
         await Locker.WaitAsync();
         try
         {
-            if (Channel is not null)
-                return;
-
-            await startNewChannel();
-            State = AgentState.Connected;
+            await TeardownChannelAsync();
         }
-        catch (Exception e)
+        finally
         {
-            Logger.LogError(e, "Error trying to start a new Rabbit MQ channel for {Endpoint}", this);
+            Locker.Release();
+            // Intentionally NOT calling Locker.Dispose() - rapid pause/restart cycles
+            // can have an in-flight WaitAsync/Release race with disposal, which would
+            // throw ObjectDisposedException. The kernel handle is reclaimed by the
+            // SemaphoreSlim finalizer. See #3132.
+        }
+    }
+
+    /// <summary>
+    /// Execute action on the channel thread-safely.
+    /// </summary>
+    /// <param name="action">The operation to execute.</param>
+    /// <exception cref="ObjectDisposedException">Agent disposed.</exception>
+    /// <exception cref="AlreadyClosedException">Channel closed by server.</exception>
+    public async Task RunWithLockAsync(Func<IChannel, ValueTask> action)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        await Locker.WaitAsync();
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (_channel == null)
+                await StartNewChannelAsync();
+
+            await action(_channel!);
         }
         finally
         {
@@ -67,89 +78,144 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
         }
     }
 
-    protected async Task startNewChannel()
+    /// <summary>Execute action on a consumer channel thread-safely.
+    /// Verifies the channel is still current before executing.</summary>
+    /// <param name="consumerChannel">The channel that received the delivery. Must not be null.</param>
+    /// <param name="action">The operation to execute.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="consumerChannel"/> is null.</exception>
+    /// <exception cref="ObjectDisposedException">Agent disposed or channel replaced.</exception>
+    /// <exception cref="AlreadyClosedException">Channel closed by server.</exception>
+    public async Task RunWithLockAsync(IChannel consumerChannel, Func<IChannel, ValueTask> action)
     {
-        Channel = await _monitor.CreateChannelAsync();
+        ArgumentNullException.ThrowIfNull(consumerChannel);
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        Channel.CallbackExceptionAsync += HandleChannelExceptionAsync;
-        Channel.ChannelShutdownAsync += HandleChannelShutdownAsync;
+        await Locker.WaitAsync();
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (!ReferenceEquals(_channel, consumerChannel))
+                throw new ObjectDisposedException(nameof(IChannel),
+                    "Consumer channel is not valid anymore.");
+
+            await action(consumerChannel);
+        }
+        finally
+        {
+            Locker.Release();
+        }
+    }
+
+    private async Task StartNewChannelAsync()
+    {
+        _channel = await _monitor.CreateChannelAsync();
+        _channel.CallbackExceptionAsync += HandleChannelExceptionAsync;
+        _channel.ChannelShutdownAsync += HandleChannelShutdownAsync;
+
+        _state = AgentState.Connected;
 
         Logger.LogInformation("Opened a new channel for Wolverine endpoint {Endpoint}", this);
     }
 
     private Task HandleChannelExceptionAsync(object? sender, CallbackExceptionEventArgs args)
     {
-        Logger.LogError(args.Exception, "Callback error in Rabbit Mq agent. Attempting to restart the channel");
+        Logger.LogError(args.Exception, "Callback error in Rabbit Mq agent. Dropping channel");
 
-        // Try to restart the connection
-#pragma warning disable VSTHRD110
-        Task.Run(async () =>
-#pragma warning restore VSTHRD110
-        {
-            await Locker.WaitAsync();
-            try
-            {
-                _monitor.Remove(this);
-                try
-                {
-                    await teardownChannel();
-                }
-                catch (Exception e)
-                {
-                    Logger.LogError(e, "Error when trying to tear down a blocked channel");
-                }
-
-                Channel = null;
-
-                // EnsureInitiated can be used here as Locker(SemaphoreSlim) is not re-entrant
-                await startNewChannel();
-                State = AgentState.Connected;
-
-                Logger.LogInformation("Restarted the Rabbit MQ channel");
-            }
-            finally
-            {
-                Locker.Release();
-            }
-        });
+        if (sender is IChannel channel)
+            _ = Task.Run(async () => await ShutdownChannelAsync(channel));
 
         return Task.CompletedTask;
     }
 
-    private Task HandleChannelShutdownAsync(object? sender, ShutdownEventArgs e)
+    private async Task HandleChannelShutdownAsync(object? sender, ShutdownEventArgs e)
     {
-        State = AgentState.Disconnected;
+        if (sender is IChannel channel)
+            _ = Task.Run(async () => await ShutdownChannelAsync(channel));
 
-        if (e.Initiator == ShutdownInitiator.Application) return Task.CompletedTask;
+        if (e.Exception == null || e.Initiator == ShutdownInitiator.Application)
+            return;
 
-        if (e.Exception != null)
+        Logger.LogError(e.Exception,
+            "Unexpected channel shutdown for Rabbit MQ. Wolverine will attempt to restart...");
+    }
+
+    private async Task ShutdownChannelAsync(IChannel oldChannel)
+    {
+        if (_disposed)
+            return;
+
+        await Locker.WaitAsync();
+        try
         {
-            Logger.LogError(e.Exception,
-                "Unexpected channel shutdown for Rabbit MQ. Wolverine will attempt to restart...");
+            if (_disposed)
+                return;
+
+            if (ReferenceEquals(_channel, oldChannel))
+            {
+                _channel = null;
+                _state = AgentState.Disconnected;
+            }
+        }
+        finally
+        {
+            Locker.Release();
         }
 
-        return Task.CompletedTask;
+        //Close / dispose the old channel outside the Locker
+        await DisposeChannelAsync(oldChannel);
+    }
+
+    private async ValueTask DisposeChannelAsync(IChannel? channel)
+    {
+        if (channel is null)
+            return;
+
+        try
+        {
+            channel.CallbackExceptionAsync -= HandleChannelExceptionAsync;
+            channel.ChannelShutdownAsync -= HandleChannelShutdownAsync;
+            await channel.CloseAsync();
+            channel.Dispose();
+        }
+        catch (Exception e) when (e is ObjectDisposedException or AlreadyClosedException)
+        {
+            // The channel is dead - nothing to dispose
+        }
     }
 
     internal virtual Task ReconnectedAsync()
     {
-        State = AgentState.Connected;
         return Task.CompletedTask;
     }
 
-    protected async Task teardownChannel()
+    private async Task TeardownChannelAsync()
     {
-        if (Channel != null)
+        await DisposeChannelAsync(_channel);
+        _channel = null;
+        _state = AgentState.Disconnected;
+    }
+
+    /// <summary>
+    /// Tears down the current channel, creates a new one, and runs a setup action,
+    /// all under the Locker. Used by subclasses during reconnection.
+    /// </summary>
+    protected async Task ReplaceChannelAndSetupAsync(Func<IChannel, ValueTask> setupAction)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        await Locker.WaitAsync();
+        try
         {
-            Channel.ChannelShutdownAsync -= HandleChannelShutdownAsync;
-            Channel.CallbackExceptionAsync -= HandleChannelExceptionAsync;
-            await Channel.CloseAsync();
-            await Channel.AbortAsync();
-            Channel.Dispose();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            await TeardownChannelAsync();
+            await StartNewChannelAsync();
+            await setupAction(_channel!);
         }
-
-        Channel = null;
-
-        State = AgentState.Disconnected;
+        finally
+        {
+            Locker.Release();
+        }
     }
 }

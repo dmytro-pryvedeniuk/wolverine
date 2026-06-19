@@ -21,12 +21,13 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
             {
                 await e.CompleteAsync();
             }
-            catch (AlreadyClosedException exception)
+            catch (ObjectDisposedException)
             {
-                if (exception.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
-                {
-                    logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
-                }
+                logger.LogInformation("Channel disposed, discarding the envelope");
+            }
+            catch (AlreadyClosedException ex) when (ex.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
+            {
+                logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
             }
         }, logger, cancellationToken);
 
@@ -97,24 +98,22 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
     {
         try
         {
-            if (envelope.RabbitMqListener.Channel is not null)
+            if (envelope.RabbitMqListener.IsConnected)
             {
                 // Mark as acknowledged before the NACK so that any subsequent
                 // CompleteAsync() call is a no-op (prevents double ack/nack)
                 envelope.Acknowledged = true;
                 envelope.HasBeenAcked = true;
-                await envelope.RabbitMqListener.Channel.BasicNackAsync(envelope.DeliveryTag, false, false, token);
+                await envelope.RabbitMqListener.NackDeliveryAsync(envelope.DeliveryTag);
             }
         }
-        catch (AlreadyClosedException exception)
+        catch (ObjectDisposedException)
         {
-            if (exception.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
-            {
-                Logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
-                return;
-            }
-
-            throw;
+            Logger.LogInformation("Channel disposed, discarding the envelope");
+        }
+        catch (AlreadyClosedException ex) when (ex.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
+        {
+            Logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
         }
     }
 }

@@ -2,6 +2,7 @@ using JasperFx.Blocks;
 using JasperFx.Core.Reflection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 using Wolverine.Configuration;
 using Wolverine.Runtime;
 using Wolverine.Transports;
@@ -57,6 +58,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     private readonly RabbitMqTransport _transport;
     private WorkerQueueMessageConsumer? _consumer;
     private string? _consumerId;
+    private volatile bool _disposed;
 
     public RabbitMqListener(IWolverineRuntime runtime,
         RabbitMqQueue queue, RabbitMqTransport transport, IReceiver receiver) : base(
@@ -68,7 +70,6 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
         ConsumerAddress = Address;
 
         _sender = new Lazy<ISender>(() => Queue.ResolveSender(runtime));
-        _cancellation.Register(() => { _ = teardownChannel(); });
 
         _runtime = runtime;
         _transport = transport;
@@ -95,25 +96,29 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     {
         var consumer = _consumer;
         if (consumer == null)
-        {
             return;
-        }
+        consumer.Latch();
 
-        var channel = Channel;
-        if (channel != null)
+        try
         {
             foreach (var consumerTag in consumer.ConsumerTags)
             {
-                await channel.BasicCancelAsync(consumerTag, true, default);
+                await consumer.Channel.BasicCancelAsync(consumerTag, noWait: false, default);
             }
+        }
+        catch (Exception e) when (e is ObjectDisposedException or AlreadyClosedException)
+        {
+            // Shutting down — nothing to cancel
         }
     }
 
     public override async ValueTask DisposeAsync()
     {
-        _consumer?.Dispose();
-        _consumer = null;
+        if (_disposed)
+            return;
+        _disposed = true;
 
+        _consumer?.Dispose();
         await base.DisposeAsync();
         
         // Don't dispose _sender.Value — it's a shared sender cached on
@@ -173,24 +178,27 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     public Uri BaseAddress => Queue.Uri;
     public Uri ConsumerAddress { get; private set; }
 
-    public async Task CreateAsync()
+    public Task CreateAsync()
     {
-        await EnsureInitiated();
+        return RunWithLockAsync(CreateInternalAsync);
+    }
 
+    internal async ValueTask CreateInternalAsync(IChannel ch)
+    {
         if (Queue.AutoDelete || _transport.AutoProvision)
         {
-            await Queue.DeclareAsync(Channel!, Logger);
+            await Queue.DeclareAsync(ch, Logger);
 
             if (Queue.DeadLetterQueue != null && Queue.DeadLetterQueue.Mode != DeadLetterQueueMode.WolverineStorage)
             {
                 var dlq = _transport.Queues[Queue.DeadLetterQueue.QueueName];
-                await dlq.DeclareAsync(Channel!, Logger);
+                await dlq.DeclareAsync(ch, Logger);
             }
         }
 
         try
         {
-            var result = await Channel!.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
+            var result = await ch.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
             if (Queue.Role == EndpointRole.Application)
             {
                 Logger.LogInformation("{Count} messages in queue {QueueName} at listening start up time",
@@ -204,10 +212,10 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         var mapper = Queue.BuildMapper(_runtime);
 
-        _consumer = new WorkerQueueMessageConsumer(Channel!, _receiver, Logger, this, mapper, Address, _cancellation);
+        _consumer = new WorkerQueueMessageConsumer(ch, _receiver, Logger, this, mapper, Address, _cancellation);
 
-        await Channel!.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
-        await Channel.BasicConsumeAsync(Queue.QueueName, false,
+        await ch.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
+        await ch.BasicConsumeAsync(Queue.QueueName, false,
             _transport.ConnectionFactory?.ClientProvidedName ?? _runtime.Options.ServiceName, Queue.ConsumerArguments, _consumer,
             _runtime.Cancellation);
 
@@ -221,11 +229,11 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
     internal override async Task ReconnectedAsync()
     {
+        // Cancel existing consumers on the old channel
         await StopAsync();
-        await teardownChannel();
-        await CreateAsync();
 
-        await base.ReconnectedAsync();
+        // Atomically replace the channel and set up the new consumer
+        await ReplaceChannelAndSetupAsync(CreateInternalAsync);
     }
 
     public override string ToString()
@@ -235,16 +243,22 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
     public async ValueTask RequeueAsync(RabbitMqEnvelope envelope)
     {
-        if (!envelope.Acknowledged)
-        {
-            await Channel!.BasicNackAsync(envelope.DeliveryTag, false, false, _cancellation);
-        }
+        if (!envelope.Acknowledged && _consumer?.Channel is { } channel)
+            await RunWithLockAsync(channel,
+                ch => ch.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation));
 
         await _sender.Value.SendAsync(envelope);
     }
 
-    public async Task CompleteAsync(ulong deliveryTag)
+    internal Task NackDeliveryAsync(ulong deliveryTag)
     {
-        await Channel!.BasicAckAsync(deliveryTag, true, _cancellation);
+        return RunWithLockAsync(_consumer!.Channel,
+            ch => ch.BasicNackAsync(deliveryTag, multiple: false, requeue: false, _cancellation));
+    }
+
+    public Task CompleteAsync(ulong deliveryTag)
+    {
+        return RunWithLockAsync(_consumer!.Channel,
+            ch => ch.BasicAckAsync(deliveryTag, true, _cancellation));
     }
 }

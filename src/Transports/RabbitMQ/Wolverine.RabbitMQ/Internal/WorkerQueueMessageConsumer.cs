@@ -12,7 +12,7 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
     private readonly ILogger _logger;
     private readonly IRabbitMqEnvelopeMapper _mapper;
     private readonly IReceiver _workerQueue;
-    private bool _latched;
+    private volatile bool _latched;
 
     public WorkerQueueMessageConsumer(IChannel channel, IReceiver workerQueue, ILogger logger,
         RabbitMqListener listener,
@@ -28,6 +28,11 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
 
     public void Dispose()
     {
+        Latch();
+    }
+
+    public void Latch()
+    {
         _latched = true;
     }
 
@@ -38,7 +43,8 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
     {
         if (_latched || _cancellation.IsCancellationRequested || !_listener.IsConnected)
         {
-            await _listener.Channel!.BasicRejectAsync(deliveryTag, true, _cancellation);
+            await _listener.RunWithLockAsync(Channel,
+                ch => ch.BasicRejectAsync(deliveryTag, requeue: true, _cancellation));
             return;
         }
 
@@ -77,7 +83,8 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
 
             try
             {
-                await Channel.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation);
+                await _listener.RunWithLockAsync(Channel,
+                    ch => ch.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation));
             }
             catch (Exception nackEx)
             {
@@ -91,7 +98,8 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
 
         if (envelope.IsPing())
         {
-            await Channel.BasicAckAsync(deliveryTag, false, _cancellation);
+            await _listener.RunWithLockAsync(Channel,
+                ch => ch.BasicAckAsync(deliveryTag, multiple: false, _cancellation));
             return;
         }
 
@@ -104,7 +112,8 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
             _logger.LogError(e, "Failure to receive an incoming message with {Id}, trying to 'Nack' the message", envelope.Id);
             try
             {
-                await Channel.BasicNackAsync(deliveryTag, false, true, _cancellation);
+                await _listener.RunWithLockAsync(Channel,
+                    ch => ch.BasicNackAsync(deliveryTag, multiple: false, requeue: true, _cancellation));
             }
             catch (Exception ex)
             {
