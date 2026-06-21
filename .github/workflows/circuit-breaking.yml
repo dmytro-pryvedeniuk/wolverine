@@ -16,6 +16,7 @@ on:
 env:
   config: Release
   disable_test_parallelization: true
+  PR_BODY: ${{ github.event.pull_request.body }}
 
 jobs:
   setup:
@@ -30,7 +31,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             COUNT=${{ github.event.inputs.repeat || 1 }}
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            LINE=$(echo '${{ github.event.pull_request.body }}' | grep '^x-repeat/' | head -1)
+            LINE=$(echo "$PR_BODY" | grep '^x-repeat/' | head -1)
             if [ -n "$LINE" ]; then
               NAMES=$(echo "$LINE" | cut -d/ -f2)
               COUNT=$(echo "$LINE" | cut -d/ -f3)
@@ -46,10 +47,13 @@ jobs:
 
   test:
     needs: setup
-    if: needs.setup.outputs.count == 1
+    name: test${{ fromJson(needs.setup.outputs.count) > 1 && format(' ({0})', matrix.run) || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    steps: &test-steps
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -66,13 +70,3 @@ jobs:
       - name: Stop containers
         if: always()
         run: docker compose down
-
-  test-matrix:
-    needs: setup
-    if: needs.setup.outputs.count != 1
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
-    steps: *test-steps
