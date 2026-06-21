@@ -181,7 +181,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
     public Task CreateAsync()
     {
-        return RunWithLockAsync(CreateInternalAsync);
+        return RunWithLockAsync(_ => ValueTask.CompletedTask);
     }
 
     internal async ValueTask CreateInternalAsync(IChannel ch)
@@ -235,6 +235,12 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         // Atomically replace the channel and set up the new consumer
         await ReplaceChannelAndSetupAsync(CreateInternalAsync);
+    }
+
+    protected override async ValueTask OnChannelRestartedAsync(IChannel channel)
+    {
+        _consumer?.Dispose();
+        await CreateInternalAsync(channel);
     }
 
     public override string ToString()

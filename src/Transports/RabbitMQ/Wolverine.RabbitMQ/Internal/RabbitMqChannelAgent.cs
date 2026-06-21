@@ -68,7 +68,10 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             if (_channel == null)
+            {
                 await StartNewChannelAsync();
+                await OnChannelRestartedAsync(_channel!);
+            }
 
             try
             {
@@ -80,6 +83,7 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
                 _channel = null;
                 _state = AgentState.Disconnected;
                 await StartNewChannelAsync();
+                await OnChannelRestartedAsync(_channel!);
                 await action(_channel!);
             }
         }
@@ -205,6 +209,17 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
     internal virtual Task ReconnectedAsync()
     {
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Called after a new channel is created outside of ReplaceChannelAndSetupAsync
+    /// (i.e., when RunWithLockAsync recreates a nulled channel). Override in
+    /// subclasses to re-register per-channel state such as consumers.
+    /// Base implementation is a no-op.
+    /// </summary>
+    protected virtual ValueTask OnChannelRestartedAsync(IChannel channel)
+    {
+        return ValueTask.CompletedTask;
     }
 
     private async Task TeardownChannelAsync()
