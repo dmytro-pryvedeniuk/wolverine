@@ -70,7 +70,18 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
             if (_channel == null)
                 await StartNewChannelAsync();
 
-            await action(_channel!);
+            try
+            {
+                await action(_channel!);
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
+            {
+                Logger.LogWarning("Channel operation failed with {ExceptionType}, replacing channel and retrying", ex.GetType().Name);
+                _channel = null;
+                _state = AgentState.Disconnected;
+                await StartNewChannelAsync();
+                await action(_channel!);
+            }
         }
         finally
         {
