@@ -256,6 +256,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
             {
                 await RunWithLockAsync(channel,
                     ch => ch.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation));
+                envelope.Acknowledged = true;
             }
             catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
             {
