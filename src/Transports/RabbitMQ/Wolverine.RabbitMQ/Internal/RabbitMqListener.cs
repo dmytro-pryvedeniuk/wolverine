@@ -281,7 +281,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         return RunWithLockAsync(channel, async ch =>
         {
-            await ch.BasicAckAsync(deliveryTag, true, _cancellation);
+            await ch.BasicAckAsync(deliveryTag, multiple: false, _cancellation);
             Logger.LogDebug("CompleteAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
         });
     }
