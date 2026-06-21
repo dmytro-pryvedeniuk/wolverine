@@ -245,8 +245,17 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     public async ValueTask RequeueAsync(RabbitMqEnvelope envelope)
     {
         if (!envelope.Acknowledged && _consumer?.Channel is { } channel)
-            await RunWithLockAsync(channel,
-                ch => ch.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation));
+        {
+            try
+            {
+                await RunWithLockAsync(channel,
+                    ch => ch.BasicNackAsync(envelope.DeliveryTag, multiple: false, requeue: false, _cancellation));
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
+            {
+                Logger.LogInformation("Channel unavailable while nacking for requeue, sending new copy anyway");
+            }
+        }
 
         await _sender.Value.SendAsync(envelope);
     }

@@ -25,7 +25,17 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
             }
         }, logger, cancellationToken);
 
-        Defer = new RetryBlock<RabbitMqEnvelope>((e, _) => e.DeferAsync().AsTask(), logger, cancellationToken);
+        Defer = new RetryBlock<RabbitMqEnvelope>(async (e, _) =>
+        {
+            try
+            {
+                await e.DeferAsync();
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
+            {
+                logger.LogInformation("Channel unavailable while deferring, discarding the envelope");
+            }
+        }, logger, cancellationToken);
         _deadLetterQueue = new RetryBlock<RabbitMqEnvelope>(moveToErrorQueueAsync, logger, cancellationToken);
     }
 
