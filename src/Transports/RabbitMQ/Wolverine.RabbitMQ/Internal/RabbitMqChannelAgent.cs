@@ -110,8 +110,8 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
             {
                 Logger.LogWarning(
                     "Consumer channel rejected for {Agent}: channel was replaced", this);
-                throw new ObjectDisposedException(nameof(IChannel),
-                    "Consumer channel is not valid anymore.");
+                throw new AlreadyClosedException(
+                    new ShutdownEventArgs(ShutdownInitiator.Application, Constants.PreconditionFailed, "Consumer channel is not valid anymore."));
             }
 
             await action(consumerChannel);

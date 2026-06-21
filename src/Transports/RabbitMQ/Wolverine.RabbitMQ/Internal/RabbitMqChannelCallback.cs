@@ -1,5 +1,6 @@
 using JasperFx.Blocks;
 using Microsoft.Extensions.Logging;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
 using Wolverine.Runtime;
 using Wolverine.Transports;
@@ -19,9 +20,12 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
             {
                 await e.CompleteAsync();
             }
-            catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
+            catch (AlreadyClosedException exception)
             {
-                logger.LogInformation("Channel unavailable, discarding the envelope");
+                if (exception.ShutdownReason?.ReplyCode == Constants.PreconditionFailed)
+                {
+                    logger.LogInformation(exception, "Encountered an unknown delivery tag, discarding the envelope");
+                }
             }
         }, logger, cancellationToken);
 
@@ -101,9 +105,15 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
                 await envelope.RabbitMqListener.NackDeliveryAsync(envelope.DeliveryTag);
             }
         }
-        catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
+        catch (AlreadyClosedException exception)
         {
-            Logger.LogInformation("Channel unavailable, discarding the envelope");
+            if (exception.ShutdownReason?.ReplyCode == Constants.PreconditionFailed)
+            {
+                Logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
+                return;
+            }
+
+            throw;
         }
     }
 }
