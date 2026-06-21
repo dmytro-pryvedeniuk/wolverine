@@ -140,8 +140,6 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
     {
         setDefaults(envelope);
         await _sending.PostAsync(envelope);
-        _lastMessageSentAt = DateTimeOffset.UtcNow;
-        _messageLogger.Sent(envelope);
     }
 
     public async ValueTask StoreAndForwardAsync(Envelope envelope)
@@ -149,9 +147,6 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
         setDefaults(envelope);
 
         await storeAndForwardAsync(envelope);
-
-        _lastMessageSentAt = DateTimeOffset.UtcNow;
-        _messageLogger.Sent(envelope);
     }
 
     public bool SupportsNativeScheduledSend => _sender.SupportsNativeScheduledSend;
@@ -255,6 +250,9 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
         try
         {
             await _sender.SendAsync(envelope);
+
+            _lastMessageSentAt = DateTimeOffset.UtcNow;
+            _messageLogger.Sent(envelope);
         }
         catch (Exception e)
         {
@@ -275,6 +273,10 @@ public abstract class SendingAgent : ISendingAgent, ISenderCallback, ISenderCirc
         {
             await _sender.SendAsync(envelope);
 
+            _lastMessageSentAt = DateTimeOffset.UtcNow;
+            _messageLogger.Sent(envelope);
+
+            // Report after send and before pool return — envelope is alive here
             await MarkSuccessfulAsync(envelope);
 
             // wolverine#2955: success branch only — a retried/failed envelope is
