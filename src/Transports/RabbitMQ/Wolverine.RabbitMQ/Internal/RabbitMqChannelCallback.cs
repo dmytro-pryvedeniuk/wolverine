@@ -15,19 +15,13 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
         Logger = logger;
         Complete = new RetryBlock<RabbitMqEnvelope>(async (e, _) =>
         {
-            // AlreadyClosedException: Already closed: The AMQP operation was interrupted: AMQP close-reason, initiated by Peer, code=406, text='PRECONDITION_FAILED - unknown delivery tag 1', classId=60, methodId=80
-
             try
             {
                 await e.CompleteAsync();
             }
-            catch (ObjectDisposedException)
+            catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
             {
-                logger.LogInformation("Channel disposed, discarding the envelope");
-            }
-            catch (AlreadyClosedException ex) when (ex.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
-            {
-                logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
+                logger.LogInformation("Channel unavailable, discarding the envelope");
             }
         }, logger, cancellationToken);
 
@@ -107,13 +101,9 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
                 await envelope.RabbitMqListener.NackDeliveryAsync(envelope.DeliveryTag);
             }
         }
-        catch (ObjectDisposedException)
+        catch (Exception ex) when (ex is ObjectDisposedException or AlreadyClosedException)
         {
-            Logger.LogInformation("Channel disposed, discarding the envelope");
-        }
-        catch (AlreadyClosedException ex) when (ex.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
-        {
-            Logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
+            Logger.LogInformation("Channel unavailable, discarding the envelope");
         }
     }
 }

@@ -56,7 +56,7 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     private readonly IWolverineRuntime _runtime;
     private readonly Lazy<ISender> _sender;
     private readonly RabbitMqTransport _transport;
-    private WorkerQueueMessageConsumer? _consumer;
+    private volatile WorkerQueueMessageConsumer? _consumer;
     private string? _consumerId;
     private volatile bool _disposed;
 
@@ -101,10 +101,11 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         try
         {
-            foreach (var consumerTag in consumer.ConsumerTags)
+            await RunWithLockAsync(consumer.Channel, async ch =>
             {
-                await consumer.Channel.BasicCancelAsync(consumerTag, noWait: false, default);
-            }
+                foreach (var consumerTag in consumer.ConsumerTags)
+                    await ch.BasicCancelAsync(consumerTag, noWait: false, default);
+            });
         }
         catch (Exception e) when (e is ObjectDisposedException or AlreadyClosedException)
         {
@@ -252,13 +253,19 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
     internal Task NackDeliveryAsync(ulong deliveryTag)
     {
-        return RunWithLockAsync(_consumer!.Channel,
+        if (_consumer?.Channel is not { } channel)
+            return Task.CompletedTask;
+
+        return RunWithLockAsync(channel,
             ch => ch.BasicNackAsync(deliveryTag, multiple: false, requeue: false, _cancellation));
     }
 
     public Task CompleteAsync(ulong deliveryTag)
     {
-        return RunWithLockAsync(_consumer!.Channel,
+        if (_consumer?.Channel is not { } channel)
+            return Task.CompletedTask;
+
+        return RunWithLockAsync(channel,
             ch => ch.BasicAckAsync(deliveryTag, true, _cancellation));
     }
 }
