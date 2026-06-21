@@ -257,7 +257,9 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
             }
         }
 
+        Logger.LogDebug("RequeueAsync: sending new copy for deliveryTag={DeliveryTag}", envelope.DeliveryTag);
         await _sender.Value.SendAsync(envelope);
+        Logger.LogDebug("RequeueAsync: new copy sent for deliveryTag={DeliveryTag}", envelope.DeliveryTag);
     }
 
     internal Task NackDeliveryAsync(ulong deliveryTag)
@@ -265,8 +267,11 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
         if (_consumer?.Channel is not { } channel)
             return Task.CompletedTask;
 
-        return RunWithLockAsync(channel,
-            ch => ch.BasicNackAsync(deliveryTag, multiple: false, requeue: false, _cancellation));
+        return RunWithLockAsync(channel, async ch =>
+        {
+            await ch.BasicNackAsync(deliveryTag, multiple: false, requeue: false, _cancellation);
+            Logger.LogDebug("NackDeliveryAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
+        });
     }
 
     public Task CompleteAsync(ulong deliveryTag)
@@ -274,7 +279,10 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
         if (_consumer?.Channel is not { } channel)
             return Task.CompletedTask;
 
-        return RunWithLockAsync(channel,
-            ch => ch.BasicAckAsync(deliveryTag, true, _cancellation));
+        return RunWithLockAsync(channel, async ch =>
+        {
+            await ch.BasicAckAsync(deliveryTag, true, _cancellation);
+            Logger.LogDebug("CompleteAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
+        });
     }
 }

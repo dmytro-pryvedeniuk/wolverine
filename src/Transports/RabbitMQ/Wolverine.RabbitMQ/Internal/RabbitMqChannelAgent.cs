@@ -153,6 +153,9 @@ internal abstract class RabbitMqChannelAgent : IAsyncDisposable
 
         Logger.LogError(e.Exception,
             "Unexpected channel shutdown for Rabbit MQ. Wolverine will attempt to restart...");
+
+        Logger.LogDebug("Channel shutdown details: Initiator={Initiator}, ReplyCode={ReplyCode}, ReplyText={ReplyText}",
+            e.Initiator, e.ReplyCode, e.ReplyText);
     }
 
     private async Task ShutdownChannelAsync(IChannel oldChannel)

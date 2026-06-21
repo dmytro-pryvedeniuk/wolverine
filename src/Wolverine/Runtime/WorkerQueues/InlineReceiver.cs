@@ -128,6 +128,7 @@ internal class InlineReceiver : IReceiver
             activity?.SetStatus(ActivityStatusCode.Error, e.GetType().Name);
             _logger.LogError(e, "Failure to receive an incoming message for envelope {EnvelopeId}", envelope.Id);
 
+            _logger.LogDebug("Deferring envelope {EnvelopeId} after processing failure", envelope.Id);
             try
             {
                 await listener.DeferAsync(envelope);
