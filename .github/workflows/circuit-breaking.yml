@@ -6,22 +6,50 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      repeat:
+        description: 'Number of times to repeat tests'
+        required: false
+        default: 1
+        type: number
 
 env:
   config: Release
   disable_test_parallelization: true
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.count.outputs.count }}
+      matrix: ${{ steps.count.outputs.matrix }}
+    steps:
+      - name: Determine repeat count
+        id: count
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            COUNT=${{ github.event.inputs.repeat || 1 }}
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            LINE=$(echo '${{ github.event.pull_request.body }}' | grep '^x-repeat/' | head -1)
+            if [ -n "$LINE" ]; then
+              NAMES=$(echo "$LINE" | cut -d/ -f2)
+              COUNT=$(echo "$LINE" | cut -d/ -f3)
+              case ",$NAMES," in *",${{ github.workflow }},"*) ;; *) COUNT=1 ;; esac
+            else
+              COUNT=1
+            fi
+          else
+            COUNT=1
+          fi
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "matrix={\"run\":[$(seq -s ',' 1 $COUNT)]}" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: setup
+    if: needs.setup.outputs.count == 1
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        run: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]   # repeat
-
-    steps:
+    steps: &test-steps
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -38,3 +66,13 @@ jobs:
       - name: Stop containers
         if: always()
         run: docker compose down
+
+  test-matrix:
+    needs: setup
+    if: needs.setup.outputs.count != 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    steps: *test-steps
