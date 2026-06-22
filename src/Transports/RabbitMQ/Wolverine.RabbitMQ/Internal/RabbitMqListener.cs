@@ -68,7 +68,6 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
         ConsumerAddress = Address;
 
         _sender = new Lazy<ISender>(() => Queue.ResolveSender(runtime));
-        _cancellation.Register(() => { _ = teardownChannel(); });
 
         _runtime = runtime;
         _transport = transport;
@@ -95,18 +94,21 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     {
         var consumer = _consumer;
         if (consumer == null)
-        {
             return;
-        }
 
-        var channel = Channel;
-        if (channel != null)
+        // Latch outside the lock so any messages delivered after this point
+        // are rejected (Nack with requeue) and redelivered to the new consumer.
+        consumer.Latch();
+
+        var channel = consumer.Channel;
+        if (!IsConnected)
+            return;
+
+        await RunWithLockAsync(channel, async ch =>
         {
             foreach (var consumerTag in consumer.ConsumerTags)
-            {
-                await channel.BasicCancelAsync(consumerTag, true, default);
-            }
-        }
+                await channel.BasicCancelAsync(consumerTag, noWait: true, default);
+        });
     }
 
     public override async ValueTask DisposeAsync()
@@ -175,22 +177,32 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
     public async Task CreateAsync()
     {
-        await EnsureInitiated();
+        await RunWithLockAsync(CreateInternalAsync);
 
+        if (_transport.AutoPingListeners)
+        {
+            // This is trying to be a forcing function to make the channel really connect
+            var ping = Envelope.ForPing(Address);
+            await _sender.Value.SendAsync(ping);
+        }
+    }
+
+    private async ValueTask CreateInternalAsync(IChannel channel)
+    {
         if (Queue.AutoDelete || _transport.AutoProvision)
         {
-            await Queue.DeclareAsync(Channel!, Logger);
+            await Queue.DeclareAsync(channel, Logger);
 
             if (Queue.DeadLetterQueue != null && Queue.DeadLetterQueue.Mode != DeadLetterQueueMode.WolverineStorage)
             {
                 var dlq = _transport.Queues[Queue.DeadLetterQueue.QueueName];
-                await dlq.DeclareAsync(Channel!, Logger);
+                await dlq.DeclareAsync(channel, Logger);
             }
         }
 
         try
         {
-            var result = await Channel!.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
+            var result = await channel.QueueDeclarePassiveAsync(Queue.QueueName, _cancellation);
             if (Queue.Role == EndpointRole.Application)
             {
                 Logger.LogInformation("{Count} messages in queue {QueueName} at listening start up time",
@@ -204,12 +216,19 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
 
         var mapper = Queue.BuildMapper(_runtime);
 
-        _consumer = new WorkerQueueMessageConsumer(Channel!, _receiver, Logger, this, mapper, Address, _cancellation);
+        _consumer = new WorkerQueueMessageConsumer(channel, _receiver, Logger, this, mapper, Address, _cancellation);
 
-        await Channel!.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
-        await Channel.BasicConsumeAsync(Queue.QueueName, false,
+        await channel.BasicQosAsync(0, Queue.PreFetchCount, false, _cancellation);
+        await channel.BasicConsumeAsync(Queue.QueueName, false,
             _transport.ConnectionFactory?.ClientProvidedName ?? _runtime.Options.ServiceName, Queue.ConsumerArguments, _consumer,
             _runtime.Cancellation);
+    }
+
+    internal override async Task ReconnectedAsync()
+    {
+        await StopAsync();
+        await base.ReconnectedAsync();
+        await RunWithLockAsync(CreateInternalAsync);
 
         if (_transport.AutoPingListeners)
         {
@@ -217,15 +236,6 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
             var ping = Envelope.ForPing(Address);
             await _sender.Value.SendAsync(ping);
         }
-    }
-
-    internal override async Task ReconnectedAsync()
-    {
-        await StopAsync();
-        await teardownChannel();
-        await CreateAsync();
-
-        await base.ReconnectedAsync();
     }
 
     public override string ToString()
@@ -236,15 +246,44 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     public async ValueTask RequeueAsync(RabbitMqEnvelope envelope)
     {
         if (!envelope.Acknowledged)
-        {
-            await Channel!.BasicNackAsync(envelope.DeliveryTag, false, false, _cancellation);
-        }
+            await NackDeliveryAsync(envelope.DeliveryTag, _cancellation);
 
         await _sender.Value.SendAsync(envelope);
     }
 
-    public async Task CompleteAsync(ulong deliveryTag)
+    public Task CompleteAsync(ulong deliveryTag)
     {
-        await Channel!.BasicAckAsync(deliveryTag, true, _cancellation);
+        if (_consumer?.Channel is not { } channel)
+            return Task.CompletedTask;
+
+        return RunWithLockAsync(channel, async ch =>
+        {
+            await ch.BasicAckAsync(deliveryTag, multiple: true, _cancellation);
+            Logger.LogDebug("CompleteAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
+        });
+    }
+
+    internal Task NackDeliveryAsync(ulong deliveryTag, CancellationToken cancellationToken)
+    {
+        if (_consumer?.Channel is not { } channel)
+            return Task.CompletedTask;
+
+        return RunWithLockAsync(channel, async ch =>
+        {
+            await ch.BasicNackAsync(deliveryTag, multiple: false, requeue: false, cancellationToken);
+            Logger.LogDebug("NackDeliveryAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
+        });
+    }
+
+    internal Task RejectDeliveryAsync(ulong deliveryTag, CancellationToken cancellationToken)
+    {
+        if (_consumer?.Channel is not { } channel)
+            return Task.CompletedTask;
+
+        return RunWithLockAsync(channel, async ch =>
+        {
+            await ch.BasicRejectAsync(deliveryTag, requeue: true, cancellationToken);
+            Logger.LogDebug("RejectDeliveryAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
+        });
     }
 }

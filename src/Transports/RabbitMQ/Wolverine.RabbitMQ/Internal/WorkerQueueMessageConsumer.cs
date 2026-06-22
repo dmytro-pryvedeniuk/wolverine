@@ -31,6 +31,15 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
         _latched = true;
     }
 
+    /// <summary>
+    /// Prevent further message deliveries from being processed.
+    /// Any messages arriving after this call will be rejected with requeue.
+    /// </summary>
+    public void Latch()
+    {
+        _latched = true;
+    }
+
     //TODO do something with the token passed in here
     public override async Task HandleBasicDeliverAsync(string consumerTag, ulong deliveryTag, bool redelivered, string exchange,
         string routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body,
@@ -38,7 +47,7 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
     {
         if (_latched || _cancellation.IsCancellationRequested || !_listener.IsConnected)
         {
-            await _listener.Channel!.BasicRejectAsync(deliveryTag, true, _cancellation);
+            await _listener.RejectDeliveryAsync(deliveryTag, cancellationToken);
             return;
         }
 

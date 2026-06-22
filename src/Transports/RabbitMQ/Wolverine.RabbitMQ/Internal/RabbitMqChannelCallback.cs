@@ -1,5 +1,6 @@
 using JasperFx.Blocks;
 using Microsoft.Extensions.Logging;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
 using Wolverine.Runtime;
 using Wolverine.Transports;
@@ -23,7 +24,7 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
             }
             catch (AlreadyClosedException exception)
             {
-                if (exception.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
+                if (exception.ShutdownReason?.ReplyCode == Constants.PreconditionFailed)
                 {
                     logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
                 }
@@ -97,18 +98,15 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
     {
         try
         {
-            if (envelope.RabbitMqListener.Channel is not null)
-            {
-                // Mark as acknowledged before the NACK so that any subsequent
-                // CompleteAsync() call is a no-op (prevents double ack/nack)
-                envelope.Acknowledged = true;
-                envelope.HasBeenAcked = true;
-                await envelope.RabbitMqListener.Channel.BasicNackAsync(envelope.DeliveryTag, false, false, token);
-            }
+            // Mark as acknowledged before the NACK so that any subsequent
+            // CompleteAsync() call is a no-op (prevents double ack/nack)
+            envelope.Acknowledged = true;
+            envelope.HasBeenAcked = true;
+            await envelope.RabbitMqListener.NackDeliveryAsync(envelope.DeliveryTag, token);
         }
         catch (AlreadyClosedException exception)
         {
-            if (exception.Message.Contains("'PRECONDITION_FAILED - unknown delivery tag'"))
+            if (exception.ShutdownReason?.ReplyCode == Constants.PreconditionFailed)
             {
                 Logger.LogInformation("Encountered an unknown delivery tag, discarding the envelope");
                 return;
