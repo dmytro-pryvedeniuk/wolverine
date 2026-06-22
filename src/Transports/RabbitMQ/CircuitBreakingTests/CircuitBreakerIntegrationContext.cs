@@ -25,7 +25,7 @@ public abstract class CircuitBreakerIntegrationContext(ITestOutputHelper output)
 
     public async Task InitializeAsync()
     {
-        _queueName = $"{GetType().Name}_{DateTime.UtcNow:yyyyMMddHHmmss}";
+        _queueName = $"{GetType().Name}_{Guid.NewGuid():N}";
 
         _host = await Host.CreateDefaultBuilder()
             .UseWolverine(configureListener)
