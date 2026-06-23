@@ -102,7 +102,7 @@ internal class RabbitMqChannelCallback : IChannelCallback, IDisposable, ISupport
             // CompleteAsync() call is a no-op (prevents double ack/nack)
             envelope.Acknowledged = true;
             envelope.HasBeenAcked = true;
-            await envelope.RabbitMqListener.NackDeliveryAsync(envelope.DeliveryTag, token);
+            await envelope.RabbitMqListener.NackDeliveryAsync(envelope.DeliveryTag, envelope.DeliveryChannel, token);
         }
         catch (AlreadyClosedException exception)
         {

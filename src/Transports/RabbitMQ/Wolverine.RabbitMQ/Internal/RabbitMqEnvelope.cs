@@ -1,11 +1,14 @@
+using RabbitMQ.Client;
+
 namespace Wolverine.RabbitMQ.Internal;
 
 internal class RabbitMqEnvelope : Envelope
 {
-    public RabbitMqEnvelope(RabbitMqListener listener, ulong deliveryTag)
+    public RabbitMqEnvelope(RabbitMqListener listener, ulong deliveryTag, IChannel deliveryChannel)
     {
         RabbitMqListener = listener;
         DeliveryTag = deliveryTag;
+        DeliveryChannel = deliveryChannel;
     }
 
     /// <summary>
@@ -20,6 +23,7 @@ internal class RabbitMqEnvelope : Envelope
 
     internal RabbitMqListener RabbitMqListener { get;  }
     internal ulong DeliveryTag { get; private set;}
+    internal IChannel DeliveryChannel { get; }
 
     public bool Acknowledged { get; internal set; }
 
@@ -27,7 +31,7 @@ internal class RabbitMqEnvelope : Envelope
     {
         if (Acknowledged) return;
 
-        await RabbitMqListener.CompleteAsync(DeliveryTag);
+        await RabbitMqListener.CompleteAsync(DeliveryTag, DeliveryChannel);
         Acknowledged = true;
     }
 
@@ -39,7 +43,7 @@ internal class RabbitMqEnvelope : Envelope
         // and consumes a prefetch slot (blocking PreFetchCount(1) entirely).
         if (!Acknowledged)
         {
-            await RabbitMqListener.CompleteAsync(DeliveryTag);
+            await RabbitMqListener.CompleteAsync(DeliveryTag, DeliveryChannel);
             Acknowledged = true;
         }
 

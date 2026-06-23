@@ -246,41 +246,32 @@ internal class RabbitMqListener : RabbitMqChannelAgent, IListener, ISupportDeadL
     public async ValueTask RequeueAsync(RabbitMqEnvelope envelope)
     {
         if (!envelope.Acknowledged)
-            await NackDeliveryAsync(envelope.DeliveryTag, _cancellation);
+            await NackDeliveryAsync(envelope.DeliveryTag, envelope.DeliveryChannel, _cancellation);
 
         await _sender.Value.SendAsync(envelope);
     }
 
-    public Task CompleteAsync(ulong deliveryTag)
+    public Task CompleteAsync(ulong deliveryTag, IChannel deliveryChannel)
     {
-        if (_consumer?.Channel is not { } channel)
-            return Task.CompletedTask;
-
-        return RunWithLockAsync(channel, async ch =>
+        return RunWithLockAsync(deliveryChannel, async ch =>
         {
             await ch.BasicAckAsync(deliveryTag, multiple: true, _cancellation);
             Logger.LogDebug("CompleteAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
         });
     }
 
-    internal Task NackDeliveryAsync(ulong deliveryTag, CancellationToken cancellationToken)
+    internal Task NackDeliveryAsync(ulong deliveryTag, IChannel deliveryChannel, CancellationToken cancellationToken)
     {
-        if (_consumer?.Channel is not { } channel)
-            return Task.CompletedTask;
-
-        return RunWithLockAsync(channel, async ch =>
+        return RunWithLockAsync(deliveryChannel, async ch =>
         {
             await ch.BasicNackAsync(deliveryTag, multiple: false, requeue: false, cancellationToken);
             Logger.LogDebug("NackDeliveryAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);
         });
     }
 
-    internal Task RejectDeliveryAsync(ulong deliveryTag, CancellationToken cancellationToken)
+    internal Task RejectDeliveryAsync(ulong deliveryTag, IChannel deliveryChannel, CancellationToken cancellationToken)
     {
-        if (_consumer?.Channel is not { } channel)
-            return Task.CompletedTask;
-
-        return RunWithLockAsync(channel, async ch =>
+        return RunWithLockAsync(deliveryChannel, async ch =>
         {
             await ch.BasicRejectAsync(deliveryTag, requeue: true, cancellationToken);
             Logger.LogDebug("RejectDeliveryAsync succeeded for deliveryTag={DeliveryTag}", deliveryTag);

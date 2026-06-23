@@ -47,11 +47,11 @@ internal class WorkerQueueMessageConsumer : AsyncDefaultBasicConsumer, IDisposab
     {
         if (_latched || _cancellation.IsCancellationRequested || !_listener.IsConnected)
         {
-            await _listener.RejectDeliveryAsync(deliveryTag, cancellationToken);
+            await _listener.RejectDeliveryAsync(deliveryTag, Channel, cancellationToken);
             return;
         }
 
-        var envelope = new RabbitMqEnvelope(_listener, deliveryTag);
+        var envelope = new RabbitMqEnvelope(_listener, deliveryTag, Channel);
 
         try
         {
