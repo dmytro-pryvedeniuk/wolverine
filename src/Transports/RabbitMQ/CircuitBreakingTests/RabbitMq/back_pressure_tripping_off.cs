@@ -21,7 +21,7 @@ public class back_pressure_tripping_off(ITestOutputHelper output) : IAsyncLifeti
 
     public async Task InitializeAsync()
     {
-        var queueName = $"{GetType().Name}_{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var queueName = $"{GetType().Name}_{Guid.NewGuid():N}";
 
         _host = await Host.CreateDefaultBuilder()
             .UseWolverine(opts =>
